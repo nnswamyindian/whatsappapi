@@ -15,6 +15,9 @@ import {
   UsersRound,
   Settings,
   ShieldAlert,
+  Bot,
+  TrendingUp,
+  Sparkles,
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -27,12 +30,15 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
 
   const navItems = [
     { label: 'Overview', to: '/', icon: LayoutDashboard },
+    { label: 'Guided Onboarding', to: '/onboarding', icon: Sparkles },
     { label: 'Campaigns', to: '/campaigns', icon: Send },
+    { label: 'Chatbot Studio', to: '/chatbots', icon: Bot },
+    { label: 'Automations', to: '/automations', icon: GitBranch },
+    { label: 'WhatsApp CRM', to: '/crm', icon: TrendingUp },
     { label: 'Templates', to: '/templates', icon: FileCode2 },
     { label: 'Contacts', to: '/contacts', icon: Users },
     { label: 'Audiences', to: '/audiences', icon: UserCheck },
     { label: 'Shared Inbox', to: '/inbox', icon: Inbox },
-    { label: 'Automations', to: '/automations', icon: GitBranch },
     { label: 'API & Integrations', to: '/integrations', icon: KeyRound },
     { label: 'Reports', to: '/reports', icon: BarChart3 },
     { label: 'Billing & Usage', to: '/billing', icon: CreditCard },
@@ -60,7 +66,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
           <div className="px-3 pb-2 text-[11px] font-bold uppercase tracking-wider text-slate-400">
             Operations
           </div>
-          {navItems.slice(0, 7).map((item) => (
+          {navItems.slice(0, 9).map((item) => (
             <NavLink
               key={item.to}
               to={item.to}
@@ -82,7 +88,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
           <div className="px-3 pt-4 pb-2 text-[11px] font-bold uppercase tracking-wider text-slate-400">
             Management & System
           </div>
-          {navItems.slice(7).map((item) => (
+          {navItems.slice(9).map((item) => (
             <NavLink
               key={item.to}
               to={item.to}

@@ -166,6 +166,8 @@ CREATE TABLE IF NOT EXISTS templates (
   footer_text TEXT,
   buttons_json TEXT NOT NULL DEFAULT '[]',
   variables_json TEXT NOT NULL DEFAULT '[]',
+  is_carousel INTEGER NOT NULL DEFAULT 0,
+  cards_json TEXT NOT NULL DEFAULT '[]',
   status TEXT NOT NULL DEFAULT 'DRAFT', -- 'DRAFT', 'SUBMITTED', 'APPROVED', 'REJECTED', 'PAUSED'
   meta_template_id TEXT,
   rejection_reason TEXT,
@@ -392,5 +394,281 @@ CREATE TABLE IF NOT EXISTS audit_logs (
   details_json TEXT NOT NULL DEFAULT '{}',
   ip_address TEXT,
   created_at TEXT NOT NULL
+);
+
+-- Visual Chatbots & Interactive Node-Based Workflows
+CREATE TABLE IF NOT EXISTS chatbots (
+  id TEXT PRIMARY KEY,
+  organization_id TEXT NOT NULL,
+  name TEXT NOT NULL,
+  description TEXT,
+  trigger_keyword TEXT,
+  is_active INTEGER NOT NULL DEFAULT 0,
+  draft_nodes_json TEXT NOT NULL DEFAULT '[]',
+  draft_edges_json TEXT NOT NULL DEFAULT '[]',
+  published_nodes_json TEXT NOT NULL DEFAULT '[]',
+  published_edges_json TEXT NOT NULL DEFAULT '[]',
+  version INTEGER NOT NULL DEFAULT 1,
+  execution_count INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE
+);
+
+-- Active Chatbot Conversation Sessions (Persistent State Machine)
+CREATE TABLE IF NOT EXISTS chatbot_sessions (
+  id TEXT PRIMARY KEY,
+  organization_id TEXT NOT NULL,
+  chatbot_id TEXT NOT NULL,
+  conversation_id TEXT NOT NULL,
+  contact_id TEXT NOT NULL,
+  current_node_id TEXT,
+  status TEXT NOT NULL DEFAULT 'active', -- 'active', 'waiting_for_input', 'human_takeover', 'completed', 'failed'
+  waiting_variable_name TEXT,
+  variables_json TEXT NOT NULL DEFAULT '{}',
+  expires_at TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE,
+  FOREIGN KEY (chatbot_id) REFERENCES chatbots(id) ON DELETE CASCADE,
+  UNIQUE(organization_id, conversation_id)
+);
+
+-- CRM Pipeline Stages
+CREATE TABLE IF NOT EXISTS pipeline_stages (
+  id TEXT PRIMARY KEY,
+  organization_id TEXT NOT NULL,
+  name TEXT NOT NULL,
+  order_index INTEGER NOT NULL DEFAULT 0,
+  color TEXT NOT NULL DEFAULT '#16A34A',
+  is_default INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL,
+  FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE
+);
+
+-- CRM Activities & Timeline Log
+CREATE TABLE IF NOT EXISTS crm_activities (
+  id TEXT PRIMARY KEY,
+  organization_id TEXT NOT NULL,
+  contact_id TEXT NOT NULL,
+  user_id TEXT,
+  user_name TEXT,
+  activity_type TEXT NOT NULL, -- 'note', 'call', 'meeting', 'status_change', 'campaign_sent', 'reply_received'
+  title TEXT NOT NULL,
+  description TEXT,
+  metadata_json TEXT NOT NULL DEFAULT '{}',
+  created_at TEXT NOT NULL,
+  FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE,
+  FOREIGN KEY (contact_id) REFERENCES contacts(id) ON DELETE CASCADE
+);
+
+-- Automatic Reply Classification & Intelligent Tagging Rules
+CREATE TABLE IF NOT EXISTS reply_rules (
+  id TEXT PRIMARY KEY,
+  organization_id TEXT NOT NULL,
+  name TEXT NOT NULL,
+  trigger_keyword TEXT NOT NULL,
+  match_type TEXT NOT NULL DEFAULT 'contains', -- 'contains', 'exact', 'starts_with', 'intent'
+  category TEXT NOT NULL DEFAULT 'Enquiry', -- 'Pricing Enquiry', 'Purchase Intent', 'Support Request', 'Complaint', 'Opt Out'
+  add_tags_json TEXT NOT NULL DEFAULT '[]',
+  move_pipeline_stage_id TEXT,
+  assign_agent_id TEXT,
+  create_task TEXT,
+  is_optout INTEGER NOT NULL DEFAULT 0,
+  is_active INTEGER NOT NULL DEFAULT 1,
+  priority INTEGER NOT NULL DEFAULT 10,
+  created_at TEXT NOT NULL,
+  FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE
+);
+
+-- Campaign-to-CRM Attribution
+CREATE TABLE IF NOT EXISTS campaign_attributions (
+  id TEXT PRIMARY KEY,
+  organization_id TEXT NOT NULL,
+  campaign_id TEXT NOT NULL,
+  contact_id TEXT NOT NULL,
+  template_id TEXT,
+  template_name TEXT,
+  delivered INTEGER NOT NULL DEFAULT 0,
+  read INTEGER NOT NULL DEFAULT 0,
+  replied INTEGER NOT NULL DEFAULT 0,
+  pipeline_stage_id TEXT,
+  conversion_value REAL DEFAULT 0.0,
+  conversion_recorded_at TEXT,
+  attribution_model TEXT NOT NULL DEFAULT 'last_touch',
+  created_at TEXT NOT NULL,
+  FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE,
+  FOREIGN KEY (campaign_id) REFERENCES campaigns(id) ON DELETE CASCADE,
+  FOREIGN KEY (contact_id) REFERENCES contacts(id) ON DELETE CASCADE
+);
+
+-- Custom Roles with Granular Permissions
+CREATE TABLE IF NOT EXISTS custom_roles (
+  id TEXT PRIMARY KEY,
+  organization_id TEXT NOT NULL,
+  name TEXT NOT NULL,
+  description TEXT,
+  permissions_json TEXT NOT NULL DEFAULT '[]',
+  created_at TEXT NOT NULL,
+  FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE
+);
+
+-- Customer Applications for Platform Approval Workflow
+CREATE TABLE IF NOT EXISTS customer_applications (
+  id TEXT PRIMARY KEY,
+  organization_id TEXT NOT NULL,
+  user_id TEXT NOT NULL,
+  business_name TEXT NOT NULL,
+  owner_name TEXT NOT NULL,
+  email TEXT NOT NULL,
+  phone_e164 TEXT NOT NULL,
+  country TEXT NOT NULL,
+  business_category TEXT NOT NULL,
+  website TEXT,
+  business_address TEXT,
+  intended_usage TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'PENDING_APPROVAL', -- 'PENDING_APPROVAL', 'APPROVED', 'REJECTED', 'ACTION_REQUIRED', 'SUSPENDED'
+  rejection_reason TEXT,
+  info_requested_details TEXT,
+  info_submitted_details TEXT,
+  admin_notes TEXT,
+  reviewed_by TEXT,
+  reviewed_at TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE,
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_cust_app_status ON customer_applications(status);
+
+-- Centralized Email Templates
+CREATE TABLE IF NOT EXISTS email_templates (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  slug TEXT UNIQUE NOT NULL,
+  subject TEXT NOT NULL,
+  html_content TEXT NOT NULL,
+  text_content TEXT NOT NULL,
+  category TEXT NOT NULL DEFAULT 'transactional',
+  variables_json TEXT NOT NULL DEFAULT '[]',
+  is_system INTEGER NOT NULL DEFAULT 1,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+
+-- Email Delivery Logs & Telemetry
+CREATE TABLE IF NOT EXISTS email_logs (
+  id TEXT PRIMARY KEY,
+  recipient TEXT NOT NULL,
+  template_slug TEXT NOT NULL,
+  subject TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'sent', -- 'queued', 'sent', 'failed', 'delivered'
+  error_message TEXT,
+  metadata_json TEXT NOT NULL DEFAULT '{}',
+  created_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_email_logs_recipient ON email_logs(recipient);
+
+-- In-App & Multi-Tenant Notification System
+CREATE TABLE IF NOT EXISTS notifications (
+  id TEXT PRIMARY KEY,
+  organization_id TEXT,
+  user_id TEXT,
+  type TEXT NOT NULL, -- 'registration', 'approval', 'whatsapp', 'campaign', 'billing', 'security', 'system'
+  title TEXT NOT NULL,
+  message TEXT NOT NULL,
+  link TEXT,
+  is_read INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_notifications_user_unread ON notifications(user_id, is_read);
+
+-- User Notification Preferences
+CREATE TABLE IF NOT EXISTS notification_preferences (
+  id TEXT PRIMARY KEY,
+  user_id TEXT UNIQUE NOT NULL,
+  email_alerts INTEGER NOT NULL DEFAULT 1,
+  push_alerts INTEGER NOT NULL DEFAULT 1,
+  campaign_updates INTEGER NOT NULL DEFAULT 1,
+  chat_updates INTEGER NOT NULL DEFAULT 1,
+  security_alerts INTEGER NOT NULL DEFAULT 1,
+  updated_at TEXT NOT NULL,
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+
+-- Web Push / PWA Push Subscriptions
+CREATE TABLE IF NOT EXISTS push_subscriptions (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL,
+  endpoint TEXT UNIQUE NOT NULL,
+  keys_json TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+
+-- Platform Subscription Plans (Configurable by Super Admin)
+CREATE TABLE IF NOT EXISTS subscription_plans (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  slug TEXT UNIQUE NOT NULL,
+  description TEXT,
+  monthly_price_usd REAL NOT NULL DEFAULT 0.0,
+  yearly_price_usd REAL NOT NULL DEFAULT 0.0,
+  contact_limit INTEGER NOT NULL DEFAULT 1000,
+  team_member_limit INTEGER NOT NULL DEFAULT 3,
+  campaign_limit INTEGER NOT NULL DEFAULT 50,
+  waba_limit INTEGER NOT NULL DEFAULT 1,
+  features_json TEXT NOT NULL DEFAULT '[]',
+  is_active INTEGER NOT NULL DEFAULT 1,
+  sort_order INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+
+-- Active Organization Subscriptions
+CREATE TABLE IF NOT EXISTS subscriptions (
+  id TEXT PRIMARY KEY,
+  organization_id TEXT NOT NULL UNIQUE,
+  plan_id TEXT NOT NULL,
+  billing_cycle TEXT NOT NULL DEFAULT 'monthly', -- 'monthly', 'yearly'
+  status TEXT NOT NULL DEFAULT 'active', -- 'trial', 'active', 'past_due', 'canceled', 'expired'
+  start_date TEXT NOT NULL,
+  renewal_date TEXT,
+  trial_end_date TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE,
+  FOREIGN KEY (plan_id) REFERENCES subscription_plans(id)
+);
+
+-- Invoices & Billing Statements
+CREATE TABLE IF NOT EXISTS invoices (
+  id TEXT PRIMARY KEY,
+  organization_id TEXT NOT NULL,
+  invoice_number TEXT UNIQUE NOT NULL,
+  amount REAL NOT NULL,
+  currency TEXT NOT NULL DEFAULT 'USD',
+  status TEXT NOT NULL DEFAULT 'paid', -- 'paid', 'pending', 'failed'
+  billing_reason TEXT NOT NULL,
+  pdf_url TEXT,
+  created_at TEXT NOT NULL,
+  FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE
+);
+
+-- Guided 12-Step Onboarding Checklists
+CREATE TABLE IF NOT EXISTS onboarding_checklists (
+  id TEXT PRIMARY KEY,
+  organization_id TEXT NOT NULL,
+  step_key TEXT NOT NULL,
+  is_completed INTEGER NOT NULL DEFAULT 0,
+  completed_at TEXT,
+  completed_by TEXT,
+  verification_data_json TEXT NOT NULL DEFAULT '{}',
+  created_at TEXT NOT NULL,
+  FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE,
+  UNIQUE(organization_id, step_key)
 );
 `;

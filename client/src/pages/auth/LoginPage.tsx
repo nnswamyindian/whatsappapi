@@ -8,7 +8,7 @@ export const LoginPage: React.FC = () => {
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-  const { login } = useAuth();
+  const { login, activeOrg } = useAuth();
   const navigate = useNavigate();
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -17,6 +17,7 @@ export const LoginPage: React.FC = () => {
     setError(null);
     try {
       await login(email, password);
+      const savedOrgId = localStorage.getItem('gw_active_org_id');
       navigate('/');
     } catch (err: any) {
       setError(err.message || 'Invalid email or password');
@@ -33,15 +34,17 @@ export const LoginPage: React.FC = () => {
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col justify-center py-12 px-4 sm:px-6 lg:px-8">
       <div className="sm:mx-auto sm:w-full sm:max-w-md text-center">
-        <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-brand-900 to-brand-600 flex items-center justify-center text-white mx-auto shadow-md mb-3">
-          <MessageSquare className="w-6 h-6" />
-        </div>
+        <Link to="/" className="inline-flex items-center gap-2 group mb-3">
+          <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-brand-900 to-brand-600 flex items-center justify-center text-white mx-auto shadow-md group-hover:scale-105 transition-transform">
+            <MessageSquare className="w-6 h-6" />
+          </div>
+        </Link>
         <h1 className="text-2xl font-bold tracking-tight text-slate-900">Sign in to GreenWave</h1>
         <p className="text-xs text-slate-500 mt-1">Official WhatsApp Business Messaging Platform</p>
       </div>
 
       <div className="mt-6 sm:mx-auto sm:w-full sm:max-w-md">
-        <div className="bg-white py-8 px-6 shadow-xl shadow-slate-200/50 rounded-2xl border border-slate-200 sm:px-8 space-y-5">
+        <div className="bg-white py-8 px-6 shadow-xl shadow-slate-200/50 rounded-3xl border border-slate-200 sm:px-8 space-y-5">
           {error && (
             <div className="p-3 bg-rose-50 border border-rose-200 text-rose-800 text-xs rounded-xl font-medium">
               {error}
@@ -69,13 +72,18 @@ export const LoginPage: React.FC = () => {
                   placeholder="admin@greenwave.io"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  className="w-full pl-9 pr-3 py-2 border border-slate-300 rounded-xl focus:ring-2 focus:ring-brand-500 font-semibold"
+                  className="w-full pl-9 pr-3 py-2 border border-slate-200 rounded-xl focus:ring-2 focus:ring-brand-500 font-semibold"
                 />
               </div>
             </div>
 
             <div>
-              <label className="block font-bold text-slate-700 mb-1">Password</label>
+              <div className="flex items-center justify-between mb-1">
+                <label className="block font-bold text-slate-700">Password</label>
+                <Link to="/forgot-password" className="text-[11px] text-brand-700 font-semibold hover:underline">
+                  Forgot password?
+                </Link>
+              </div>
               <div className="relative">
                 <Lock className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
                 <input
@@ -84,7 +92,7 @@ export const LoginPage: React.FC = () => {
                   placeholder="••••••••••••"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="w-full pl-9 pr-3 py-2 border border-slate-300 rounded-xl focus:ring-2 focus:ring-brand-500 font-semibold"
+                  className="w-full pl-9 pr-3 py-2 border border-slate-200 rounded-xl focus:ring-2 focus:ring-brand-500 font-semibold"
                 />
               </div>
             </div>
@@ -99,11 +107,19 @@ export const LoginPage: React.FC = () => {
             </button>
           </form>
 
-          <div className="text-center pt-2 border-t border-slate-100 text-xs text-slate-500">
-            Don't have a workspace?{' '}
-            <Link to="/register" className="font-bold text-brand-700 hover:underline">
-              Create an organization
-            </Link>
+          <div className="pt-4 border-t border-slate-100 text-center text-xs text-slate-500 space-y-1">
+            <div>
+              Don't have an account yet?{' '}
+              <Link to="/register" className="text-brand-700 font-bold hover:underline">
+                Register Business
+              </Link>
+            </div>
+            <div>
+              Registered and waiting for review?{' '}
+              <Link to="/application-status" className="text-brand-700 font-semibold hover:underline">
+                Check Status
+              </Link>
+            </div>
           </div>
         </div>
       </div>

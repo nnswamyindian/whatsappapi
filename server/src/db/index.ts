@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { SCHEMA_SQL } from './schema.js';
 import bcrypt from 'bcryptjs';
 import { v4 as uuidv4 } from 'uuid';
+import { seedSubscriptionPlans, seedEmailTemplates } from './seeds.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -20,12 +21,148 @@ const dbInstance = new DatabaseSync(DB_PATH);
 // Initialize schema
 dbInstance.exec(SCHEMA_SQL);
 
+// Safe idempotent column migrations for existing databases
+try {
+  dbInstance.exec(`ALTER TABLE templates ADD COLUMN is_carousel INTEGER NOT NULL DEFAULT 0;`);
+} catch (e) {}
+try {
+  dbInstance.exec(`ALTER TABLE templates ADD COLUMN cards_json TEXT DEFAULT '[]';`);
+} catch (e) {}
+try {
+  dbInstance.exec(`ALTER TABLE messages ADD COLUMN error_code TEXT;`);
+} catch (e) {}
+try {
+  dbInstance.exec(`ALTER TABLE messages ADD COLUMN error_message TEXT;`);
+} catch (e) {}
+try {
+  dbInstance.exec(`ALTER TABLE contact_imports ADD COLUMN preset_name TEXT;`);
+} catch (e) {}
+
+// CRM, Conversation Control, and Reply Classification migrations
+try {
+  dbInstance.exec(`ALTER TABLE contacts ADD COLUMN pipeline_stage_id TEXT;`);
+} catch (e) {}
+try {
+  dbInstance.exec(`ALTER TABLE contacts ADD COLUMN lead_value REAL DEFAULT 0.0;`);
+} catch (e) {}
+try {
+  dbInstance.exec(`ALTER TABLE contacts ADD COLUMN assigned_agent_id TEXT;`);
+} catch (e) {}
+try {
+  dbInstance.exec(`ALTER TABLE contacts ADD COLUMN assigned_agent_name TEXT;`);
+} catch (e) {}
+try {
+  dbInstance.exec(`ALTER TABLE contacts ADD COLUMN lead_source TEXT DEFAULT 'whatsapp';`);
+} catch (e) {}
+try {
+  dbInstance.exec(`ALTER TABLE contacts ADD COLUMN campaign_id TEXT;`);
+} catch (e) {}
+try {
+  dbInstance.exec(`ALTER TABLE conversations ADD COLUMN control_mode TEXT NOT NULL DEFAULT 'bot_active';`);
+} catch (e) {}
+try {
+  dbInstance.exec(`ALTER TABLE conversations ADD COLUMN assigned_team TEXT;`);
+} catch (e) {}
+try {
+  dbInstance.exec(`ALTER TABLE memberships ADD COLUMN permissions_json TEXT DEFAULT '[]';`);
+} catch (e) {}
+try {
+  dbInstance.exec(`ALTER TABLE messages ADD COLUMN classified_category TEXT;`);
+} catch (e) {}
+try {
+  dbInstance.exec(`ALTER TABLE messages ADD COLUMN classified_intent TEXT;`);
+} catch (e) {}
+try {
+  dbInstance.exec(`ALTER TABLE messages ADD COLUMN classification_confidence REAL;`);
+} catch (e) {}
+try {
+  dbInstance.exec(`ALTER TABLE automations ADD COLUMN draft_nodes_json TEXT DEFAULT '[]';`);
+} catch (e) {}
+try {
+  dbInstance.exec(`ALTER TABLE automations ADD COLUMN draft_edges_json TEXT DEFAULT '[]';`);
+} catch (e) {}
+try {
+  dbInstance.exec(`ALTER TABLE automations ADD COLUMN published_nodes_json TEXT DEFAULT '[]';`);
+} catch (e) {}
+try {
+  dbInstance.exec(`ALTER TABLE automations ADD COLUMN published_edges_json TEXT DEFAULT '[]';`);
+} catch (e) {}
+try {
+  dbInstance.exec(`ALTER TABLE automations ADD COLUMN version INTEGER DEFAULT 1;`);
+} catch (e) {}
+
+// Multi-tenant Approval, Business Profile & Security migrations
+try {
+  dbInstance.exec(`ALTER TABLE organizations ADD COLUMN approval_status TEXT NOT NULL DEFAULT 'APPROVED';`);
+} catch (e) {}
+try {
+  dbInstance.exec(`ALTER TABLE organizations ADD COLUMN business_category TEXT;`);
+} catch (e) {}
+try {
+  dbInstance.exec(`ALTER TABLE organizations ADD COLUMN country TEXT;`);
+} catch (e) {}
+try {
+  dbInstance.exec(`ALTER TABLE organizations ADD COLUMN website TEXT;`);
+} catch (e) {}
+try {
+  dbInstance.exec(`ALTER TABLE organizations ADD COLUMN business_address TEXT;`);
+} catch (e) {}
+try {
+  dbInstance.exec(`ALTER TABLE organizations ADD COLUMN intended_usage TEXT;`);
+} catch (e) {}
+try {
+  dbInstance.exec(`ALTER TABLE organizations ADD COLUMN phone_e164 TEXT;`);
+} catch (e) {}
+try {
+  dbInstance.exec(`ALTER TABLE organizations ADD COLUMN rejection_reason TEXT;`);
+} catch (e) {}
+try {
+  dbInstance.exec(`ALTER TABLE organizations ADD COLUMN info_requested_details TEXT;`);
+} catch (e) {}
+try {
+  dbInstance.exec(`ALTER TABLE organizations ADD COLUMN info_submitted_details TEXT;`);
+} catch (e) {}
+try {
+  dbInstance.exec(`ALTER TABLE organizations ADD COLUMN admin_notes TEXT;`);
+} catch (e) {}
+try {
+  dbInstance.exec(`ALTER TABLE organizations ADD COLUMN reviewed_by TEXT;`);
+} catch (e) {}
+try {
+  dbInstance.exec(`ALTER TABLE organizations ADD COLUMN reviewed_at TEXT;`);
+} catch (e) {}
+try {
+  dbInstance.exec(`ALTER TABLE organizations ADD COLUMN contact_limit INTEGER DEFAULT 1000;`);
+} catch (e) {}
+try {
+  dbInstance.exec(`ALTER TABLE organizations ADD COLUMN team_limit INTEGER DEFAULT 3;`);
+} catch (e) {}
+try {
+  dbInstance.exec(`ALTER TABLE organizations ADD COLUMN campaign_limit INTEGER DEFAULT 50;`);
+} catch (e) {}
+
+// Users Email Verification & Password Recovery migrations
+try {
+  dbInstance.exec(`ALTER TABLE users ADD COLUMN email_verified INTEGER NOT NULL DEFAULT 1;`);
+} catch (e) {}
+try {
+  dbInstance.exec(`ALTER TABLE users ADD COLUMN email_verification_token TEXT;`);
+} catch (e) {}
+try {
+  dbInstance.exec(`ALTER TABLE users ADD COLUMN reset_password_token TEXT;`);
+} catch (e) {}
+try {
+  dbInstance.exec(`ALTER TABLE users ADD COLUMN reset_password_expires_at TEXT;`);
+} catch (e) {}
+
+
 export const db = {
   raw: dbInstance,
 
   query<T = any>(sql: string, params: any[] = []): T[] {
+    const sanitized = params.map(p => (p === undefined ? null : p));
     const stmt = dbInstance.prepare(sql);
-    return stmt.all(...params) as T[];
+    return stmt.all(...sanitized) as T[];
   },
 
   queryOne<T = any>(sql: string, params: any[] = []): T | null {
@@ -34,8 +171,9 @@ export const db = {
   },
 
   execute(sql: string, params: any[] = []): { changes: number | bigint; lastInsertRowid: number | bigint } {
+    const sanitized = params.map(p => (p === undefined ? null : p));
     const stmt = dbInstance.prepare(sql);
-    const result = stmt.run(...params);
+    const result = stmt.run(...sanitized);
     return {
       changes: result.changes,
       lastInsertRowid: result.lastInsertRowid,
@@ -57,6 +195,9 @@ export const db = {
 
 // Seed initial system data (Rate cards, default platform admin, demo workspace)
 export function seedDatabase() {
+  seedSubscriptionPlans();
+  seedEmailTemplates();
+
   const existingRates = db.query('SELECT COUNT(*) as count FROM rate_card');
   if (existingRates[0].count === 0) {
     const rates = [
@@ -76,6 +217,141 @@ export function seedDatabase() {
          VALUES (?, ?, ?, ?, ?, ?)`,
         [r.id, r.category, r.country_code, r.provider, r.platform, r.date]
       );
+    }
+  }
+
+  // Ensure pipeline stages, chatbots, and reply rules exist for all organizations
+  const allOrgs = db.query<{ id: string }>('SELECT id FROM organizations');
+  for (const org of allOrgs) {
+    const now = new Date().toISOString();
+    const existingStages = db.queryOne<{ count: number }>(
+      'SELECT COUNT(*) as count FROM pipeline_stages WHERE organization_id = ?',
+      [org.id]
+    );
+    if (!existingStages || existingStages.count === 0) {
+      const stages = [
+        { name: 'New Lead', color: '#3B82F6', order: 0 },
+        { name: 'Contacted', color: '#6366F1', order: 1 },
+        { name: 'Interested', color: '#8B5CF6', order: 2 },
+        { name: 'Qualified', color: '#10B981', order: 3 },
+        { name: 'Proposal Shared', color: '#F59E0B', order: 4 },
+        { name: 'Negotiation', color: '#EC4899', order: 5 },
+        { name: 'Converted', color: '#16A34A', order: 6 },
+        { name: 'Lost', color: '#EF4444', order: 7 },
+      ];
+      let firstStageId = '';
+      for (const s of stages) {
+        const sId = uuidv4();
+        if (s.order === 0) firstStageId = sId;
+        db.execute(
+          `INSERT INTO pipeline_stages (id, organization_id, name, order_index, color, is_default, created_at)
+           VALUES (?, ?, ?, ?, ?, 1, ?)`,
+          [sId, org.id, s.name, s.order, s.color, new Date().toISOString()]
+        );
+      }
+      db.execute(
+        "UPDATE contacts SET pipeline_stage_id = ?, lead_value = 1200.0 WHERE organization_id = ? AND (pipeline_stage_id IS NULL OR pipeline_stage_id = '')",
+        [firstStageId, org.id]
+      );
+    }
+
+    // Ensure contacts have lead_value and default pipeline stage
+    db.execute(
+      `UPDATE contacts
+       SET lead_value = 1200.0,
+           pipeline_stage_id = COALESCE(pipeline_stage_id, (SELECT id FROM pipeline_stages WHERE organization_id = ? ORDER BY order_index ASC LIMIT 1))
+       WHERE organization_id = ? AND (lead_value IS NULL OR lead_value = 0)`,
+      [org.id, org.id]
+    );
+
+    const existingChatbots = db.queryOne<{ count: number }>(
+      'SELECT COUNT(*) as count FROM chatbots WHERE organization_id = ?',
+      [org.id]
+    );
+    if (!existingChatbots || existingChatbots.count === 0) {
+      const now = new Date().toISOString();
+      const demoNodes = [
+        { id: 'start_1', type: 'start', position: { x: 50, y: 150 }, data: { label: 'Start Flow', description: 'Customer initiates conversation' } },
+        { id: 'msg_welcome', type: 'send_message', position: { x: 280, y: 150 }, data: { text: 'Hello! 👋 Welcome to GreenWave Retail. How can our team assist you today?' } },
+        { id: 'btn_menu', type: 'buttons', position: { x: 520, y: 150 }, data: { text: 'Please select an option below:', buttons: ['Product Demo', 'Pricing Info', 'Talk to Agent'] } },
+        { id: 'ask_company', type: 'ask_question', position: { x: 800, y: 50 }, data: { question: 'Awesome! Could you please share your company name?', variable: 'company_name' } },
+        { id: 'tag_lead', type: 'tag_contact', position: { x: 1050, y: 50 }, data: { tag: 'Demo-Requested' } },
+        { id: 'msg_pricing', type: 'send_message', position: { x: 800, y: 180 }, data: { text: 'Our plans start from $29/mo with unlimited team seats and 24h shared inbox!' } },
+        { id: 'handoff_agent', type: 'human_handoff', position: { x: 800, y: 310 }, data: { reason: 'Customer requested human support', transferMessage: 'Connecting you to our next available agent...' } },
+        { id: 'end_flow', type: 'end_flow', position: { x: 1300, y: 120 }, data: { label: 'Completed' } },
+      ];
+      const demoEdges = [
+        { id: 'e1', source: 'start_1', target: 'msg_welcome' },
+        { id: 'e2', source: 'msg_welcome', target: 'btn_menu' },
+        { id: 'e3', source: 'btn_menu', target: 'ask_company', label: 'Product Demo' },
+        { id: 'e4', source: 'btn_menu', target: 'msg_pricing', label: 'Pricing Info' },
+        { id: 'e5', source: 'btn_menu', target: 'handoff_agent', label: 'Talk to Agent' },
+        { id: 'e6', source: 'ask_company', target: 'tag_lead' },
+        { id: 'e7', source: 'tag_lead', target: 'end_flow' },
+        { id: 'e8', source: 'msg_pricing', target: 'end_flow' },
+      ];
+
+      db.execute(
+        `INSERT INTO chatbots (id, organization_id, name, description, trigger_keyword, is_active, draft_nodes_json, draft_edges_json, published_nodes_json, published_edges_json, version, execution_count, created_at, updated_at)
+         VALUES (?, ?, 'Lead Qualification & Support Bot', 'Default multi-step onboarding & support flow with interactive buttons and handoff', 'hi', 1, ?, ?, ?, ?, 1, 14, ?, ?)`,
+        [uuidv4(), org.id, JSON.stringify(demoNodes), JSON.stringify(demoEdges), JSON.stringify(demoNodes), JSON.stringify(demoEdges), now, now]
+      );
+    }
+
+    const existingReplyRules = db.queryOne<{ count: number }>(
+      'SELECT COUNT(*) as count FROM reply_rules WHERE organization_id = ?',
+      [org.id]
+    );
+    if (!existingReplyRules || existingReplyRules.count === 0) {
+      const now = new Date().toISOString();
+      const replyRules = [
+        { name: 'Pricing Enquiry Trigger', keyword: 'price', match: 'contains', category: 'Pricing Enquiry', tags: ['pricing-lead', 'high-intent'], isOptout: 0 },
+        { name: 'Human Agent Escalation', keyword: 'agent', match: 'contains', category: 'Support Request', tags: ['escalated', 'agent-needed'], isOptout: 0 },
+        { name: 'Stop Marketing Opt-out', keyword: 'stop', match: 'exact', category: 'Opt Out', tags: ['opted-out'], isOptout: 1 },
+      ];
+      for (const r of replyRules) {
+        db.execute(
+          `INSERT INTO reply_rules (id, organization_id, name, trigger_keyword, match_type, category, add_tags_json, is_optout, is_active, priority, created_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, 10, ?)`,
+          [uuidv4(), org.id, r.name, r.keyword, r.match, r.category, JSON.stringify(r.tags), r.isOptout, now]
+        );
+      }
+    }
+
+    // Ensure subscription exists
+    const existingSub = db.queryOne('SELECT id FROM subscriptions WHERE organization_id = ?', [org.id]);
+    if (!existingSub) {
+      db.execute(
+        `INSERT INTO subscriptions (id, organization_id, plan_id, billing_cycle, status, start_date, renewal_date, created_at, updated_at)
+         VALUES (?, ?, 'plan_growth', 'monthly', 'active', ?, ?, ?, ?)`,
+        [uuidv4(), org.id, now, new Date(Date.now() + 30 * 86400000).toISOString(), now, now]
+      );
+    }
+
+    // Ensure 12-step onboarding checklist exists
+    const onboardingSteps = [
+      { key: 'business_profile', completed: 1 },
+      { key: 'account_review', completed: 1 },
+      { key: 'whatsapp_embedded_signup', completed: 1 },
+      { key: 'meta_business_verification', completed: 1 },
+      { key: 'confirm_phone_number', completed: 1 },
+      { key: 'sync_templates', completed: 1 },
+      { key: 'import_contacts', completed: 1 },
+      { key: 'configure_team', completed: 1 },
+      { key: 'configure_roles', completed: 1 },
+      { key: 'create_test_campaign', completed: 1 },
+      { key: 'send_test_message', completed: 1 },
+      { key: 'complete_onboarding', completed: 1 },
+    ];
+    for (const step of onboardingSteps) {
+      const stepExists = db.queryOne('SELECT id FROM onboarding_checklists WHERE organization_id = ? AND step_key = ?', [org.id, step.key]);
+      if (!stepExists) {
+        db.execute(
+          `INSERT INTO onboarding_checklists (id, organization_id, step_key, is_completed, completed_at, created_at)
+           VALUES (?, ?, ?, ?, ?, ?)`,
+          [uuidv4(), org.id, step.key, step.completed, step.completed ? now : null, now]
+        );
+      }
     }
   }
 
@@ -255,6 +531,78 @@ export function seedDatabase() {
       `INSERT INTO api_keys (id, organization_id, name, key_hash, key_prefix, permissions, last_used_at, status, created_at)
        VALUES (?, ?, 'Production Commerce API', ?, 'gw_live_7f8e...', '["messages:send","otp:verify","reports:read"]', ?, 'active', ?)`,
       [uuidv4(), orgId, keyHash, now, now]
+    );
+
+    // 11. Seed CRM Pipeline Stages
+    const stages = [
+      { name: 'New Lead', color: '#3B82F6', order: 0 },
+      { name: 'Contacted', color: '#6366F1', order: 1 },
+      { name: 'Interested', color: '#8B5CF6', order: 2 },
+      { name: 'Qualified', color: '#10B981', order: 3 },
+      { name: 'Proposal Shared', color: '#F59E0B', order: 4 },
+      { name: 'Negotiation', color: '#EC4899', order: 5 },
+      { name: 'Converted', color: '#16A34A', order: 6 },
+      { name: 'Lost', color: '#EF4444', order: 7 },
+    ];
+    let newLeadStageId = '';
+    for (const s of stages) {
+      const sId = uuidv4();
+      if (s.name === 'New Lead') newLeadStageId = sId;
+      db.execute(
+        `INSERT INTO pipeline_stages (id, organization_id, name, order_index, color, is_default, created_at)
+         VALUES (?, ?, ?, ?, ?, 1, ?)`,
+        [sId, orgId, s.name, s.order, s.color, now]
+      );
+    }
+
+    // Assign existing contact to initial stage
+    if (newLeadStageId) {
+      db.execute('UPDATE contacts SET pipeline_stage_id = ?, lead_value = 1200.0 WHERE organization_id = ?', [
+        newLeadStageId,
+        orgId,
+      ]);
+    }
+
+    // 12. Seed Automatic Reply Classification Rules
+    const replyRules = [
+      { name: 'Pricing Enquiry Trigger', keyword: 'price', match: 'contains', category: 'Pricing Enquiry', tags: ['pricing-lead', 'high-intent'], isOptout: 0 },
+      { name: 'Human Agent Escalation', keyword: 'agent', match: 'contains', category: 'Support Request', tags: ['escalated', 'agent-needed'], isOptout: 0 },
+      { name: 'Stop Marketing Opt-out', keyword: 'stop', match: 'exact', category: 'Opt Out', tags: ['opted-out'], isOptout: 1 },
+    ];
+    for (const r of replyRules) {
+      db.execute(
+        `INSERT INTO reply_rules (id, organization_id, name, trigger_keyword, match_type, category, add_tags_json, is_optout, is_active, priority, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, 10, ?)`,
+        [uuidv4(), orgId, r.name, r.keyword, r.match, r.category, JSON.stringify(r.tags), r.isOptout, now]
+      );
+    }
+
+    // 13. Seed Demo Interactive Visual Chatbot
+    const demoNodes = [
+      { id: 'start_1', type: 'start', position: { x: 50, y: 150 }, data: { label: 'Start Flow', description: 'Customer initiates conversation' } },
+      { id: 'msg_welcome', type: 'send_message', position: { x: 280, y: 150 }, data: { text: 'Hello! 👋 Welcome to GreenWave Retail. How can our team assist you today?' } },
+      { id: 'btn_menu', type: 'buttons', position: { x: 520, y: 150 }, data: { text: 'Please select an option below:', buttons: ['Product Demo', 'Pricing Info', 'Talk to Agent'] } },
+      { id: 'ask_company', type: 'ask_question', position: { x: 800, y: 50 }, data: { question: 'Awesome! Could you please share your company name?', variable: 'company_name' } },
+      { id: 'tag_lead', type: 'tag_contact', position: { x: 1050, y: 50 }, data: { tag: 'Demo-Requested' } },
+      { id: 'msg_pricing', type: 'send_message', position: { x: 800, y: 180 }, data: { text: 'Our plans start from $29/mo with unlimited team seats and 24h shared inbox!' } },
+      { id: 'handoff_agent', type: 'human_handoff', position: { x: 800, y: 310 }, data: { reason: 'Customer requested human support', transferMessage: 'Connecting you to our next available agent...' } },
+      { id: 'end_flow', type: 'end_flow', position: { x: 1300, y: 120 }, data: { label: 'Completed' } },
+    ];
+    const demoEdges = [
+      { id: 'e1', source: 'start_1', target: 'msg_welcome' },
+      { id: 'e2', source: 'msg_welcome', target: 'btn_menu' },
+      { id: 'e3', source: 'btn_menu', target: 'ask_company', label: 'Product Demo' },
+      { id: 'e4', source: 'btn_menu', target: 'msg_pricing', label: 'Pricing Info' },
+      { id: 'e5', source: 'btn_menu', target: 'handoff_agent', label: 'Talk to Agent' },
+      { id: 'e6', source: 'ask_company', target: 'tag_lead' },
+      { id: 'e7', source: 'tag_lead', target: 'end_flow' },
+      { id: 'e8', source: 'msg_pricing', target: 'end_flow' },
+    ];
+
+    db.execute(
+      `INSERT INTO chatbots (id, organization_id, name, description, trigger_keyword, is_active, draft_nodes_json, draft_edges_json, published_nodes_json, published_edges_json, version, execution_count, created_at, updated_at)
+       VALUES (?, ?, 'Lead Qualification & Support Bot', 'Default multi-step onboarding & support flow with interactive buttons and handoff', 'hi', 1, ?, ?, ?, ?, 1, 14, ?, ?)`,
+      [uuidv4(), orgId, JSON.stringify(demoNodes), JSON.stringify(demoEdges), JSON.stringify(demoNodes), JSON.stringify(demoEdges), now, now]
     );
   }
 }

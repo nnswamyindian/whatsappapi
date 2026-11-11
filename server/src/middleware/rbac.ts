@@ -3,24 +3,38 @@ import { Request, Response, NextFunction } from 'express';
 export type UserRole =
   | 'owner'
   | 'admin'
+  | 'sub_admin'
+  | 'marketing_manager'
   | 'campaign_manager'
+  | 'sales_agent'
   | 'support_agent'
   | 'analyst'
-  | 'billing_manager';
+  | 'billing_manager'
+  | 'custom';
 
-const ROLE_HIERARCHY: Record<UserRole, string[]> = {
+export const ROLE_HIERARCHY: Record<UserRole, string[]> = {
   owner: ['all'],
-  admin: [
+  admin: ['all'],
+  sub_admin: [
     'campaigns:read', 'campaigns:write',
     'templates:read', 'templates:write',
     'contacts:read', 'contacts:write',
-    'inbox:read', 'inbox:write',
+    'crm:read', 'crm:write',
+    'chatbots:read', 'chatbots:write',
     'automations:read', 'automations:write',
+    'inbox:read', 'inbox:write',
     'reports:read',
-    'team:read', 'team:write',
-    'settings:read', 'settings:write',
-    'billing:read', 'billing:write',
-    'api:manage',
+    'team:read',
+  ],
+  marketing_manager: [
+    'campaigns:read', 'campaigns:write', 'campaigns:approve',
+    'templates:read', 'templates:write',
+    'contacts:read', 'contacts:write',
+    'crm:read', 'crm:write',
+    'reports:read',
+    'inbox:read',
+    'chatbots:read',
+    'automations:read', 'automations:write',
   ],
   campaign_manager: [
     'campaigns:read', 'campaigns:write',
@@ -29,21 +43,30 @@ const ROLE_HIERARCHY: Record<UserRole, string[]> = {
     'reports:read',
     'inbox:read',
   ],
+  sales_agent: [
+    'crm:read', 'crm:write',
+    'inbox:read', 'inbox:write',
+    'contacts:read', 'contacts:write',
+    'templates:read',
+  ],
   support_agent: [
     'inbox:read', 'inbox:write',
     'contacts:read',
     'templates:read',
+    'crm:read',
   ],
   analyst: [
     'reports:read',
     'campaigns:read',
     'templates:read',
+    'crm:read',
   ],
   billing_manager: [
     'billing:read', 'billing:write',
     'reports:read',
     'settings:read',
   ],
+  custom: [],
 };
 
 export function requireRole(allowedRoles: UserRole[]) {
@@ -58,13 +81,38 @@ export function requireRole(allowedRoles: UserRole[]) {
     }
 
     const currentRole = req.auth.role as UserRole;
-    if (currentRole === 'owner' || allowedRoles.includes(currentRole)) {
+    if (currentRole === 'owner' || currentRole === 'admin' || allowedRoles.includes(currentRole)) {
       return next();
     }
 
     res.status(403).json({
       error: 'Forbidden',
-      message: `Your current role '${currentRole}' lacks permission for this action. Allowed: ${allowedRoles.join(', ')}`,
+      message: `Your current role '${currentRole}' lacks permission for this action. Required one of: ${allowedRoles.join(', ')}`,
+    });
+  };
+}
+
+export function requirePermission(permission: string) {
+  return (req: Request, res: Response, next: NextFunction): void => {
+    if (!req.auth) {
+      res.status(401).json({ error: 'Unauthorized' });
+      return;
+    }
+
+    if (req.auth.isPlatformAdmin || req.auth.role === 'owner' || req.auth.role === 'admin') {
+      return next();
+    }
+
+    const currentRole = req.auth.role as UserRole;
+    const rolePerms = ROLE_HIERARCHY[currentRole] || [];
+
+    if (rolePerms.includes('all') || rolePerms.includes(permission)) {
+      return next();
+    }
+
+    res.status(403).json({
+      error: 'Forbidden',
+      message: `Action requires '${permission}' permission.`,
     });
   };
 }

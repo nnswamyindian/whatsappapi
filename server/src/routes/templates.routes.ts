@@ -36,6 +36,8 @@ router.get('/', (req: Request, res: Response) => {
       ...t,
       buttons: JSON.parse(t.buttons_json || '[]'),
       variables: JSON.parse(t.variables_json || '[]'),
+      isCarousel: Boolean(t.is_carousel),
+      cards: JSON.parse(t.cards_json || '[]'),
     }))
   );
 });
@@ -56,10 +58,12 @@ router.get('/:id', (req: Request, res: Response) => {
     ...template,
     buttons: JSON.parse(template.buttons_json || '[]'),
     variables: JSON.parse(template.variables_json || '[]'),
+    isCarousel: Boolean(template.is_carousel),
+    cards: JSON.parse(template.cards_json || '[]'),
   });
 });
 
-// Create & Submit Template
+// Create & Submit Template (supports standard, media-header, and carousel templates)
 router.post('/', requireRole(['campaign_manager']), async (req: Request, res: Response) => {
   const {
     name,
@@ -71,14 +75,73 @@ router.post('/', requireRole(['campaign_manager']), async (req: Request, res: Re
     footerText,
     buttons = [],
     variables = [],
+    isCarousel = false,
+    cards = [],
     action = 'SUBMIT', // 'DRAFT' or 'SUBMIT'
   } = req.body;
 
   const orgId = req.auth!.orgId;
 
-  if (!name || !category || !bodyText) {
-    res.status(400).json({ error: 'Name, category, and body text are required' });
+  if (!name || !category) {
+    res.status(400).json({ error: 'Template name and category are required' });
     return;
+  }
+
+  // Meta character limit validation:
+  if (!isCarousel) {
+    if (!bodyText || !bodyText.trim()) {
+      res.status(400).json({ error: 'Body text is required for standard templates' });
+      return;
+    }
+    if (bodyText.length > 1024) {
+      res.status(400).json({ error: `Body text exceeds Meta limit of 1024 characters (current: ${bodyText.length})` });
+      return;
+    }
+  }
+
+  if (headerType === 'TEXT' && headerContent && headerContent.length > 60) {
+    res.status(400).json({ error: `Header text exceeds Meta limit of 60 characters (current: ${headerContent.length})` });
+    return;
+  }
+
+  if (footerText && footerText.length > 60) {
+    res.status(400).json({ error: `Footer text exceeds Meta limit of 60 characters (current: ${footerText.length})` });
+    return;
+  }
+
+  // Button validations
+  for (const b of buttons) {
+    if (b.text && b.text.length > 25) {
+      res.status(400).json({ error: `Button label '${b.text}' exceeds Meta limit of 25 characters` });
+      return;
+    }
+  }
+
+  // Carousel validation according to official Meta specifications:
+  if (isCarousel) {
+    if (!Array.isArray(cards) || cards.length < 2 || cards.length > 10) {
+      res.status(400).json({
+        error: 'Carousel Validation Error',
+        message: 'Meta requires carousel templates to have between 2 and 10 cards.',
+      });
+      return;
+    }
+
+    for (let i = 0; i < cards.length; i++) {
+      const card = cards[i];
+      if (!card.bodyText || !card.bodyText.trim()) {
+        res.status(400).json({ error: `Carousel Card #${i + 1} must have body text` });
+        return;
+      }
+      if (card.bodyText.length > 160) {
+        res.status(400).json({ error: `Carousel Card #${i + 1} body text exceeds Meta limit of 160 characters (current: ${card.bodyText.length})` });
+        return;
+      }
+      if (card.buttons && card.buttons.length > 2) {
+        res.status(400).json({ error: `Carousel Card #${i + 1} cannot have more than 2 buttons` });
+        return;
+      }
+    }
   }
 
   // Validate template name format (Meta requires lowercase letters, numbers, and underscores)
@@ -101,39 +164,78 @@ router.post('/', requireRole(['campaign_manager']), async (req: Request, res: Re
   if (action === 'SUBMIT') {
     try {
       const { provider } = getWhatsAppProviderForOrg(orgId);
+
+      // Build components payload according to Meta specifications
+      const components: any[] = [];
+
+      if (!isCarousel) {
+        if (headerType !== 'NONE') {
+          components.push({
+            type: 'HEADER',
+            format: headerType,
+            text: headerType === 'TEXT' ? headerContent : undefined,
+          });
+        }
+        components.push({
+          type: 'BODY',
+          text: bodyText,
+        });
+        if (footerText) {
+          components.push({ type: 'FOOTER', text: footerText });
+        }
+        if (buttons.length > 0) {
+          components.push({
+            type: 'BUTTONS',
+            buttons: buttons.map((b: any) => ({
+              type: b.type,
+              text: b.text,
+              url: b.url,
+              phone_number: b.phoneNumber,
+            })),
+          });
+        }
+      } else {
+        // Carousel components specification
+        if (bodyText) {
+          components.push({ type: 'BODY', text: bodyText });
+        }
+        components.push({
+          type: 'CAROUSEL',
+          cards: cards.map((c: any) => ({
+            components: [
+              {
+                type: 'HEADER',
+                format: c.headerType || 'IMAGE',
+                example: c.headerUrl ? { header_handle: [c.headerUrl] } : undefined,
+              },
+              {
+                type: 'BODY',
+                text: c.bodyText,
+              },
+              c.buttons && c.buttons.length > 0
+                ? {
+                    type: 'BUTTONS',
+                    buttons: c.buttons.map((b: any) => ({
+                      type: b.type || 'QUICK_REPLY',
+                      text: b.text,
+                      url: b.url,
+                    })),
+                  }
+                : null,
+            ].filter(Boolean),
+          })),
+        });
+      }
+
       const submission = await provider.createTemplate({
         name: cleanName,
         category,
         language,
-        components: [
-          headerType !== 'NONE'
-            ? {
-                type: 'HEADER',
-                format: headerType,
-                text: headerType === 'TEXT' ? headerContent : undefined,
-              }
-            : null,
-          {
-            type: 'BODY',
-            text: bodyText,
-          },
-          footerText ? { type: 'FOOTER', text: footerText } : null,
-          buttons.length > 0
-            ? {
-                type: 'BUTTONS',
-                buttons: buttons.map((b: any, idx: number) => ({
-                  type: b.type,
-                  text: b.text,
-                  url: b.url,
-                  phone_number: b.phoneNumber,
-                })),
-              }
-            : null,
-        ].filter(Boolean),
+        components,
       });
 
       metaTemplateId = submission.id;
-      status = submission.status || 'APPROVED'; // Mock auto-approves, Meta marks PENDING
+      status = submission.status || 'APPROVED';
     } catch (err: any) {
       status = 'REJECTED';
     }
@@ -141,8 +243,8 @@ router.post('/', requireRole(['campaign_manager']), async (req: Request, res: Re
 
   db.execute(
     `INSERT INTO templates
-     (id, organization_id, name, category, language, header_type, header_content, body_text, footer_text, buttons_json, variables_json, status, meta_template_id, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+     (id, organization_id, name, category, language, header_type, header_content, body_text, footer_text, buttons_json, variables_json, is_carousel, cards_json, status, meta_template_id, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       templateId,
       orgId,
@@ -151,10 +253,12 @@ router.post('/', requireRole(['campaign_manager']), async (req: Request, res: Re
       language,
       headerType,
       headerContent || null,
-      bodyText,
+      bodyText || 'Carousel Template',
       footerText || null,
       JSON.stringify(buttons),
       JSON.stringify(variables),
+      isCarousel ? 1 : 0,
+      JSON.stringify(cards),
       status,
       metaTemplateId,
       now,
@@ -167,6 +271,7 @@ router.post('/', requireRole(['campaign_manager']), async (req: Request, res: Re
     name: cleanName,
     category,
     status,
+    isCarousel,
     metaTemplateId,
   });
 });

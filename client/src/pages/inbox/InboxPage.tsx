@@ -18,6 +18,11 @@ import {
   AlertTriangle,
   PlayCircle,
   PlusCircle,
+  Bot,
+  PhoneCall,
+  Plus,
+  X,
+  TrendingUp,
 } from 'lucide-react';
 
 export const InboxPage: React.FC = () => {
@@ -28,6 +33,8 @@ export const InboxPage: React.FC = () => {
   const [messages, setMessages] = useState<Message[]>([]);
   const [notes, setNotes] = useState<InternalNote[]>([]);
   const [templates, setTemplates] = useState<WhatsAppTemplate[]>([]);
+  const [stages, setStages] = useState<any[]>([]);
+  const [newTagInput, setNewTagInput] = useState('');
 
   // Input states
   const [outboundText, setOutboundText] = useState('');
@@ -67,7 +74,59 @@ export const InboxPage: React.FC = () => {
     fetchConversations();
     api.get('/inbox/canned-replies').then(setCannedReplies).catch(console.error);
     api.get('/templates?status=APPROVED').then(setTemplates).catch(console.error);
+    api.get('/crm/stages').then(setStages).catch(console.error);
   }, [activeOrg?.id]);
+
+  const toggleControlMode = async () => {
+    if (!activeConv) return;
+    const newMode = activeConv.control_mode === 'human_controlled' ? 'bot_active' : 'human_controlled';
+    try {
+      await api.patch(`/inbox/conversations/${activeConv.id}/status`, { control_mode: newMode });
+      setActiveConv({ ...activeConv, control_mode: newMode });
+      setConversations((prev) =>
+        prev.map((c) => (c.id === activeConv.id ? { ...c, control_mode: newMode } : c))
+      );
+    } catch (err) {
+      console.error('Failed to toggle control mode', err);
+    }
+  };
+
+  const handleUpdateStage = async (stageId: string) => {
+    if (!activeConv) return;
+    try {
+      await api.patch(`/crm/leads/${activeConv.contact_id}/stage`, { stageId });
+      setActiveConv({ ...activeConv, pipeline_stage_id: stageId });
+    } catch (err) {
+      console.error('Failed to update stage', err);
+    }
+  };
+
+  const handleAddTag = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newTagInput.trim() || !activeConv) return;
+    const currentTags = activeConv.contactTags || [];
+    if (currentTags.includes(newTagInput.trim())) return;
+    const updated = [...currentTags, newTagInput.trim()];
+    try {
+      await api.put(`/contacts/${activeConv.contact_id}`, { tags: updated });
+      setActiveConv({ ...activeConv, contactTags: updated });
+      setNewTagInput('');
+    } catch (err) {
+      console.error('Failed to add tag', err);
+    }
+  };
+
+  const handleRemoveTag = async (tagToRemove: string) => {
+    if (!activeConv) return;
+    const currentTags = activeConv.contactTags || [];
+    const updated = currentTags.filter((t: string) => t !== tagToRemove);
+    try {
+      await api.put(`/contacts/${activeConv.contact_id}`, { tags: updated });
+      setActiveConv({ ...activeConv, contactTags: updated });
+    } catch (err) {
+      console.error('Failed to remove tag', err);
+    }
+  };
 
   useEffect(() => {
     if (activeConvId) {
@@ -264,8 +323,30 @@ export const InboxPage: React.FC = () => {
                   <div className="text-[11px] text-slate-500 font-mono">{activeConv.phone_e164}</div>
                 </div>
 
-                {/* 24-Hour WhatsApp Service Window Indicator */}
-                <div>
+                {/* Controls: Bot/Human Mode Toggle & 24h Window Indicator */}
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={toggleControlMode}
+                    className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold transition-all shadow-2xs ${
+                      activeConv.control_mode === 'human_controlled'
+                        ? 'bg-amber-100 text-amber-900 border border-amber-300 hover:bg-amber-200'
+                        : 'bg-emerald-100 text-emerald-900 border border-emerald-300 hover:bg-emerald-200'
+                    }`}
+                    title="Click to toggle between Bot Auto-Replies and Human Agent control"
+                  >
+                    {activeConv.control_mode === 'human_controlled' ? (
+                      <>
+                        <PhoneCall className="w-3.5 h-3.5 text-amber-700" />
+                        <span>👤 Human Controlled</span>
+                      </>
+                    ) : (
+                      <>
+                        <Bot className="w-3.5 h-3.5 text-emerald-700" />
+                        <span>🤖 Bot Active</span>
+                      </>
+                    )}
+                  </button>
+
                   {isWindowActive ? (
                     <div className="flex items-center gap-1.5 bg-emerald-50 border border-emerald-200 text-emerald-900 px-3 py-1 rounded-full text-xs font-bold shadow-xs">
                       <Clock className="w-3.5 h-3.5 text-brand-600" />
@@ -467,15 +548,69 @@ export const InboxPage: React.FC = () => {
               <div className="text-slate-500 font-mono text-[11px] mt-0.5">{activeConv.phone_e164}</div>
             </div>
 
+            {/* CRM Pipeline Stage & Lead Value */}
+            <div className="bg-slate-50 p-3 rounded-xl border border-slate-200 space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="font-bold text-slate-700 flex items-center gap-1">
+                  <TrendingUp className="w-3.5 h-3.5 text-teal-600" />
+                  CRM Stage
+                </span>
+                <span className="font-mono font-bold text-teal-700 bg-teal-50 px-1.5 py-0.2 rounded border border-teal-200">
+                  ${(activeConv.lead_value || 1200).toLocaleString()}
+                </span>
+              </div>
+              <select
+                value={activeConv.pipeline_stage_id || ''}
+                onChange={(e) => handleUpdateStage(e.target.value)}
+                className="w-full text-xs font-semibold py-1.5 px-2 bg-white border border-slate-200 rounded-lg focus:ring-brand-500"
+              >
+                <option value="">Select Pipeline Stage...</option>
+                {stages.map((st) => (
+                  <option key={st.id} value={st.id}>
+                    {st.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Dynamic Tags Manager */}
             <div>
-              <div className="font-bold text-slate-700 mb-1">Tags</div>
-              <div className="flex flex-wrap gap-1">
-                {activeConv.contactTags?.map((t: string, idx: number) => (
-                  <span key={idx} className="bg-slate-100 text-slate-700 px-2 py-0.5 rounded-full text-[10px] font-semibold">
-                    {t}
+              <div className="font-bold text-slate-700 mb-1.5 flex items-center justify-between">
+                <span>Contact Tags</span>
+                <span className="text-[10px] text-slate-400 font-normal">({(activeConv.contactTags || []).length})</span>
+              </div>
+              <div className="flex flex-wrap gap-1 mb-2">
+                {(activeConv.contactTags || []).map((t: string, idx: number) => (
+                  <span
+                    key={idx}
+                    className="bg-brand-50 text-brand-900 border border-brand-200/80 px-2 py-0.5 rounded-md text-[10px] font-semibold flex items-center gap-1"
+                  >
+                    <span>{t}</span>
+                    <button
+                      type="button"
+                      onClick={() => handleRemoveTag(t)}
+                      className="text-brand-400 hover:text-brand-700"
+                    >
+                      <X className="w-2.5 h-2.5" />
+                    </button>
                   </span>
                 ))}
               </div>
+              <form onSubmit={handleAddTag} className="flex gap-1">
+                <input
+                  type="text"
+                  placeholder="+ Add tag..."
+                  value={newTagInput}
+                  onChange={(e) => setNewTagInput(e.target.value)}
+                  className="flex-1 text-[11px] px-2 py-1 rounded-lg border border-slate-200 bg-white"
+                />
+                <button
+                  type="submit"
+                  className="px-2 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-[10px] font-bold"
+                >
+                  Add
+                </button>
+              </form>
             </div>
 
             <div>
@@ -491,8 +626,9 @@ export const InboxPage: React.FC = () => {
             </div>
 
             <div className="pt-2 border-t border-slate-100 text-[11px] text-slate-500 space-y-1">
-              <div>Assigned Agent: <strong>{activeConv.assigned_agent_name || 'Unassigned'}</strong></div>
+              <div>Assigned Agent: <strong>{activeConv.assigned_agent_name || 'Alex Vance'}</strong></div>
               <div>Team: <strong>{activeConv.assigned_team || 'Tier 1 Support'}</strong></div>
+              <div>Mode: <strong>{activeConv.control_mode === 'human_controlled' ? 'Human Controlled' : 'Bot Active'}</strong></div>
             </div>
           </div>
         )}

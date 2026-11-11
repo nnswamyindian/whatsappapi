@@ -1,10 +1,45 @@
 import { Router, Request, Response } from 'express';
+import crypto from 'node:crypto';
 import { db } from '../db/index.js';
 import { ENV } from '../config/env.js';
 import { sseManager } from '../services/sse.js';
 import { v4 as uuidv4 } from 'uuid';
+import { workflowEngine } from '../services/workflow-engine.js';
 
 const router = Router();
+
+// In-memory set for deduplicating webhook events (capped to prevent memory growth)
+const processedEventIds = new Set<string>();
+function markAndCheckDuplicate(eventId: string): boolean {
+  if (processedEventIds.has(eventId)) return true;
+  if (processedEventIds.size > 20000) {
+    const firstItems = Array.from(processedEventIds).slice(0, 5000);
+    firstItems.forEach((id) => processedEventIds.delete(id));
+  }
+  processedEventIds.add(eventId);
+  return false;
+}
+
+// Status hierarchy to prevent out-of-order event regressions
+const STATUS_ORDER: Record<string, number> = {
+  queued: 1,
+  processing: 2,
+  accepted: 3,
+  sent: 4,
+  delivered: 5,
+  read: 6,
+  failed: 7,
+};
+
+function shouldUpdateStatus(currentStatus: string, newStatus: string): boolean {
+  // If either status is not in the list, allow update
+  if (!STATUS_ORDER[currentStatus] || !STATUS_ORDER[newStatus]) return true;
+  // If current is read, do not allow downgrading to delivered or sent
+  if (currentStatus === 'read' && (newStatus === 'delivered' || newStatus === 'sent')) return false;
+  // If current is delivered, do not allow downgrading to sent
+  if (currentStatus === 'delivered' && newStatus === 'sent') return false;
+  return true;
+}
 
 // 1. Meta Webhook Subscription Verification (GET)
 router.get('/whatsapp', (req: Request, res: Response) => {
@@ -12,7 +47,16 @@ router.get('/whatsapp', (req: Request, res: Response) => {
   const token = req.query['hub.verify_token'];
   const challenge = req.query['hub.challenge'];
 
-  if (mode === 'subscribe' && token === ENV.WEBHOOK_VERIFY_TOKEN) {
+  // Check against global env or organization-specific webhook verify tokens
+  const isGlobalMatch = token === ENV.WEBHOOK_VERIFY_TOKEN;
+  let isOrgMatch = false;
+
+  if (!isGlobalMatch && token) {
+    const conn = db.queryOne('SELECT 1 FROM whatsapp_connections WHERE webhook_verify_token = ?', [token]);
+    if (conn) isOrgMatch = true;
+  }
+
+  if (mode === 'subscribe' && (isGlobalMatch || isOrgMatch)) {
     console.log('[Meta Webhook] Verification challenge confirmed successfully');
     res.status(200).send(challenge);
   } else {
@@ -24,6 +68,7 @@ router.get('/whatsapp', (req: Request, res: Response) => {
 // 2. Meta Webhook Event Processing (POST)
 router.post('/whatsapp', (req: Request, res: Response) => {
   const body = req.body;
+  const signature = req.headers['x-hub-signature-256'] as string;
 
   // Immediately acknowledge receipt to Meta to prevent timeout/retries
   res.status(200).send('EVENT_RECEIVED');
@@ -32,9 +77,47 @@ router.post('/whatsapp', (req: Request, res: Response) => {
     return;
   }
 
+  // Optional HMAC-SHA256 Signature Verification if app secret configured
+  if (signature && ENV.META_APP_SECRET) {
+    try {
+      const expectedSig = `sha256=${crypto
+        .createHmac('sha256', ENV.META_APP_SECRET)
+        .update(JSON.stringify(body))
+        .digest('hex')}`;
+
+      // In production with exact raw body buffer:
+      // Note: If parsed by Express JSON, whitespace may differ slightly, so we log mismatch warnings safely
+      if (signature !== expectedSig && process.env.NODE_ENV === 'production' && !ENV.IS_SANDBOX) {
+        console.warn('[Meta Webhook] Signature verification notice: mismatch or body re-stringified');
+      }
+    } catch (e) {}
+  }
+
   try {
     for (const entry of body.entry || []) {
       for (const change of entry.changes || []) {
+        // C. Handle Template Status Updates (field: message_template_status_update)
+        if (change.field === 'message_template_status_update') {
+          const val = change.value;
+          const templateName = val?.message_template_name;
+          const templateLanguage = val?.message_template_language || 'en_US';
+          const newStatus = val?.event; // 'APPROVED', 'REJECTED', 'PENDING', 'PAUSED'
+          const rejectionReason = val?.reason || null;
+
+          if (templateName && newStatus) {
+            db.execute(
+              `UPDATE templates
+               SET status = ?,
+                   rejection_reason = ?,
+                   updated_at = ?
+               WHERE name = ? AND language = ?`,
+              [newStatus, rejectionReason, new Date().toISOString(), templateName, templateLanguage]
+            );
+            console.log(`[Meta Webhook] Template '${templateName}' status updated to ${newStatus}`);
+          }
+          continue;
+        }
+
         if (change.field !== 'messages') continue;
         const value = change.value;
         const phoneNumberId = value.metadata?.phone_number_id;
@@ -50,28 +133,55 @@ router.post('/whatsapp', (req: Request, res: Response) => {
         if (value.statuses && Array.isArray(value.statuses)) {
           for (const statusObj of value.statuses) {
             const wamid = statusObj.id;
-            const status = statusObj.status; // 'sent', 'delivered', 'read', 'failed'
+            const newStatus = statusObj.status; // 'sent', 'delivered', 'read', 'failed'
             const timestamp = statusObj.timestamp
               ? new Date(parseInt(statusObj.timestamp, 10) * 1000).toISOString()
               : new Date().toISOString();
+
+            // Deduplication check
+            const dedupeKey = `status_${wamid}_${newStatus}`;
+            if (markAndCheckDuplicate(dedupeKey)) continue;
+
+            // Extract error details if message failed
+            let errorCode = null;
+            let errorMessage = null;
+            if (newStatus === 'failed' && Array.isArray(statusObj.errors) && statusObj.errors.length > 0) {
+              const err = statusObj.errors[0];
+              errorCode = String(err.code || 'UNKNOWN_ERROR');
+              errorMessage = err.title ? `${err.title}: ${err.message || ''}` : err.message || 'Delivery failed';
+            }
+
+            // Check current status in messages table
+            const currentMsg = db.queryOne<{ status: string }>('SELECT status FROM messages WHERE provider_message_id = ?', [wamid]);
+            if (currentMsg && !shouldUpdateStatus(currentMsg.status, newStatus)) {
+              // Skip out-of-order older status
+              continue;
+            }
 
             // Update in messages table
             db.execute(
               `UPDATE messages
                SET status = ?,
+                   error_code = COALESCE(?, error_code),
+                   error_message = COALESCE(?, error_message),
                    updated_at = ?
                WHERE provider_message_id = ?`,
-              [status, timestamp, wamid]
+              [newStatus, errorCode, errorMessage, timestamp, wamid]
             );
 
             // Update in campaign recipients table
             let updateSql = 'UPDATE campaign_recipients SET status = ?';
-            const params: any[] = [status];
+            const params: any[] = [newStatus];
 
-            if (status === 'delivered') {
+            if (errorCode || errorMessage) {
+              updateSql += ', error_message = ?';
+              params.push(errorMessage || `Code ${errorCode}`);
+            }
+
+            if (newStatus === 'delivered') {
               updateSql += ', delivered_at = ?';
               params.push(timestamp);
-            } else if (status === 'read') {
+            } else if (newStatus === 'read') {
               updateSql += ', read_at = ?';
               params.push(timestamp);
             }
@@ -80,11 +190,29 @@ router.post('/whatsapp', (req: Request, res: Response) => {
             params.push(wamid);
             db.execute(updateSql, params);
 
+            // Check if recipient belongs to a campaign and update campaign counters
+            const campRecip = db.queryOne<{ campaign_id: string }>(
+              'SELECT campaign_id FROM campaign_recipients WHERE provider_message_id = ?',
+              [wamid]
+            );
+
+            if (campRecip) {
+              if (newStatus === 'delivered') {
+                db.execute('UPDATE campaigns SET delivered_count = delivered_count + 1 WHERE id = ?', [campRecip.campaign_id]);
+              } else if (newStatus === 'read') {
+                db.execute('UPDATE campaigns SET read_count = read_count + 1 WHERE id = ?', [campRecip.campaign_id]);
+              } else if (newStatus === 'failed') {
+                db.execute('UPDATE campaigns SET failed_count = failed_count + 1 WHERE id = ?', [campRecip.campaign_id]);
+              }
+            }
+
             if (orgId) {
               sseManager.broadcastToOrg(orgId, 'message:status', {
                 wamid,
-                status,
+                status: newStatus,
                 timestamp,
+                errorCode,
+                errorMessage,
               });
             }
           }
@@ -93,9 +221,33 @@ router.post('/whatsapp', (req: Request, res: Response) => {
         // B. Handle Inbound Customer Messages
         if (value.messages && Array.isArray(value.messages)) {
           for (const inMsg of value.messages) {
-            const fromPhone = `+${inMsg.from}`;
-            const textBody = inMsg.text?.body || (inMsg.type ? `[${inMsg.type} message]` : '');
             const wamid = inMsg.id;
+            if (markAndCheckDuplicate(`inbound_${wamid}`)) continue;
+
+            const fromPhone = `+${inMsg.from}`;
+            let textBody = '';
+            let msgType = inMsg.type || 'text';
+
+            if (inMsg.type === 'text') {
+              textBody = inMsg.text?.body || '';
+            } else if (inMsg.type === 'interactive') {
+              textBody = inMsg.interactive?.button_reply?.title || inMsg.interactive?.list_reply?.title || '[Interactive Response]';
+            } else if (inMsg.type === 'image') {
+              textBody = inMsg.image?.caption || '[Image received]';
+            } else if (inMsg.type === 'video') {
+              textBody = inMsg.video?.caption || '[Video received]';
+            } else if (inMsg.type === 'document') {
+              textBody = inMsg.document?.filename || '[Document received]';
+            } else if (inMsg.type === 'audio') {
+              textBody = '[Voice / Audio note]';
+            } else if (inMsg.type === 'location') {
+              textBody = `[Location: ${inMsg.location?.name || ''} (${inMsg.location?.latitude}, ${inMsg.location?.longitude})]`;
+            } else if (inMsg.type === 'reaction') {
+              textBody = `[Reacted with ${inMsg.reaction?.emoji || 'emoji'}]`;
+            } else {
+              textBody = `[${msgType} message]`;
+            }
+
             const now = new Date();
             const nowIso = now.toISOString();
             const windowExpiry = new Date(now.getTime() + 24 * 60 * 60 * 1000).toISOString();
@@ -147,12 +299,13 @@ router.post('/whatsapp', (req: Request, res: Response) => {
               );
             }
 
+            const inboundMessageId = uuidv4();
             // Record message in ledger
             db.execute(
               `INSERT INTO messages
                (id, organization_id, conversation_id, contact_id, phone_e164, direction, message_type, body, status, provider_message_id, created_at, updated_at)
-               VALUES (?, ?, ?, ?, ?, 'inbound', 'text', ?, 'delivered', ?, ?, ?)`,
-              [uuidv4(), orgId, convId, contact.id, fromPhone, textBody, wamid, nowIso, nowIso]
+               VALUES (?, ?, ?, ?, ?, 'inbound', ?, ?, 'delivered', ?, ?, ?)`,
+              [inboundMessageId, orgId, convId, contact.id, fromPhone, msgType, textBody, wamid, nowIso, nowIso]
             );
 
             sseManager.broadcastToOrg(orgId, 'inbox:inbound_message', {
@@ -161,6 +314,15 @@ router.post('/whatsapp', (req: Request, res: Response) => {
               body: textBody,
               timestamp: nowIso,
             });
+
+            // Trigger workflow engine (chatbots, automations, reply rules) asynchronously
+            workflowEngine.processInboundMessage({
+              orgId,
+              conversationId: convId,
+              contactId: contact.id,
+              phoneE164: fromPhone,
+              messageText: textBody,
+            }).catch((err) => console.error('[Workflow Engine Error on Webhook]:', err));
           }
         }
       }

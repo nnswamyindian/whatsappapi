@@ -5,6 +5,7 @@ import { requireRole } from '../middleware/rbac.js';
 import { getWhatsAppProviderForOrg } from '../providers/whatsapp/factory.js';
 import { sseManager } from '../services/sse.js';
 import { v4 as uuidv4 } from 'uuid';
+import { workflowEngine } from '../services/workflow-engine.js';
 
 const router = Router();
 router.use(authMiddleware);
@@ -189,7 +190,7 @@ router.post('/conversations/:id/messages', requireRole(['support_agent']), async
         msgId,
         orgId,
         convId,
-        conv.contact_id,
+        conv.contact_id || null,
         conv.phone_e164,
         templateName ? 'template' : 'text',
         body || null,
@@ -267,21 +268,22 @@ router.patch('/conversations/:id/assign', requireRole(['support_agent']), (req: 
   res.json({ success: true });
 });
 
-// Update Conversation Status (Open, Pending, Resolved)
+// Update Conversation Status (Open, Pending, Resolved) and Bot/Human Control Mode
 router.patch('/conversations/:id/status', requireRole(['support_agent']), (req: Request, res: Response) => {
-  const { status, priority } = req.body;
+  const { status, priority, control_mode } = req.body;
   const now = new Date().toISOString();
 
   db.execute(
     `UPDATE conversations
      SET status = COALESCE(?, status),
          priority = COALESCE(?, priority),
+         control_mode = COALESCE(?, control_mode),
          updated_at = ?
      WHERE id = ? AND organization_id = ?`,
-    [status, priority, now, req.params.id, req.auth!.orgId]
+    [status, priority, control_mode, now, req.params.id, req.auth!.orgId]
   );
 
-  res.json({ success: true });
+  res.json({ success: true, control_mode });
 });
 
 // Canned Quick Replies List & Creation
@@ -335,48 +337,57 @@ router.post('/simulate-inbound', (req: Request, res: Response) => {
     contact.id,
   ]);
 
-  db.transaction(() => {
-    let convId = conv?.id;
-    if (!convId) {
-      convId = uuidv4();
-      db.execute(
-        `INSERT INTO conversations
-         (id, organization_id, contact_id, phone_e164, status, priority, last_message_at, last_inbound_at, window_expires_at, unread_count, created_at, updated_at)
-         VALUES (?, ?, ?, ?, 'open', 'medium', ?, ?, ?, 1, ?, ?)`,
-        [convId, orgId, contact.id, contact.phone_e164, nowIso, nowIso, windowExpiry, nowIso, nowIso]
-      );
-    } else {
-      db.execute(
-        `UPDATE conversations
-         SET last_message_at = ?,
-             last_inbound_at = ?,
-             window_expires_at = ?,
-             unread_count = unread_count + 1,
-             status = 'open',
-             updated_at = ?
-         WHERE id = ?`,
-        [nowIso, nowIso, windowExpiry, nowIso, convId]
-      );
-    }
-
+  let convId = conv?.id;
+  if (!convId) {
+    convId = uuidv4();
     db.execute(
-      `INSERT INTO messages
-       (id, organization_id, conversation_id, contact_id, phone_e164, direction, message_type, body, status, provider_message_id, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, 'inbound', 'text', ?, 'delivered', ?, ?, ?)`,
-      [msgId, orgId, convId, contact.id, contact.phone_e164, body, wamid, nowIso, nowIso]
+      `INSERT INTO conversations
+       (id, organization_id, contact_id, phone_e164, status, priority, last_message_at, last_inbound_at, window_expires_at, unread_count, created_at, updated_at)
+       VALUES (?, ?, ?, ?, 'open', 'medium', ?, ?, ?, 1, ?, ?)`,
+      [convId, orgId, contact.id, contact.phone_e164, nowIso, nowIso, windowExpiry, nowIso, nowIso]
     );
-  });
+  } else {
+    db.execute(
+      `UPDATE conversations
+       SET last_message_at = ?,
+           last_inbound_at = ?,
+           window_expires_at = ?,
+           unread_count = unread_count + 1,
+           status = 'open',
+           updated_at = ?
+       WHERE id = ?`,
+      [nowIso, nowIso, windowExpiry, nowIso, convId]
+    );
+  }
+
+  db.execute(
+    `INSERT INTO messages
+     (id, organization_id, conversation_id, contact_id, phone_e164, direction, message_type, body, status, provider_message_id, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, 'inbound', 'text', ?, 'delivered', ?, ?, ?)`,
+    [msgId, orgId, convId, contact.id, contact.phone_e164, body, wamid, nowIso, nowIso]
+  );
 
   // Broadcast real-time event
   sseManager.broadcastToOrg(orgId, 'inbox:inbound_message', {
+    conversationId: convId,
     phone_e164: contact.phone_e164,
     body,
     timestamp: nowIso,
   });
 
+  // Execute workflow engine (chatbots, reply rules, CRM classification)
+  workflowEngine.processInboundMessage({
+    orgId,
+    conversationId: convId,
+    contactId: contact.id,
+    phoneE164: contact.phone_e164,
+    messageText: body,
+  }).catch((err) => console.error('[Workflow Engine Error on Simulate]:', err));
+
   res.json({
     success: true,
     message: 'Inbound message simulated successfully. 24h customer service window activated.',
+    conversationId: convId,
     wamid,
   });
 });

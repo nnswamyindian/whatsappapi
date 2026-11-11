@@ -10,7 +10,7 @@ interface AuthContextType {
   isLoading: boolean;
   switchOrganization: (orgId: string) => void;
   login: (email: string, pass: string) => Promise<void>;
-  register: (fullName: string, email: string, pass: string, orgName: string) => Promise<void>;
+  register: (payload: any) => Promise<any>;
   logout: () => void;
   refreshOrg: () => Promise<void>;
 }
@@ -81,21 +81,25 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  const register = async (fullName: string, email: string, pass: string, orgName: string) => {
+  const register = async (...args: any[]) => {
     setIsLoading(true);
     try {
-      const data = await api.post('/auth/register', {
-        fullName,
-        email,
-        password: pass,
-        organizationName: orgName,
-      });
-      localStorage.setItem('gw_token', data.token);
-      setToken(data.token);
-      setUser(data.user);
-      setOrganizations([data.organization]);
-      setActiveOrg(data.organization);
-      localStorage.setItem('gw_active_org_id', data.organization.id);
+      const payload = typeof args[0] === 'string'
+        ? { fullName: args[0], email: args[1], password: args[2], businessName: args[3] }
+        : args[0];
+
+      const data = await api.post('/auth/register', payload);
+      if (data.token) {
+        localStorage.setItem('gw_token', data.token);
+        setToken(data.token);
+      }
+      if (data.user) setUser(data.user);
+      if (data.organization) {
+        setOrganizations([data.organization]);
+        setActiveOrg(data.organization);
+        localStorage.setItem('gw_active_org_id', data.organization.id);
+      }
+      return data;
     } finally {
       setIsLoading(false);
     }

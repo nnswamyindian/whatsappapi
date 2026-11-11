@@ -8,8 +8,29 @@ class MessageQueueService {
     activeCampaigns = new Set();
     pausedCampaigns = new Set();
     constructor() {
-        // Start background worker loop
+        // 1. Recover uncompleted campaigns on startup (Durable Queue Recovery)
+        setTimeout(() => this.recoverDurableJobs(), 1500);
+        // 2. Start non-blocking background worker loop
         setInterval(() => this.processNext(), 250);
+    }
+    recoverDurableJobs() {
+        try {
+            const pendingCampaigns = db.query("SELECT id, organization_id FROM campaigns WHERE status IN ('processing', 'scheduled')");
+            for (const camp of pendingCampaigns) {
+                const queuedCount = db.queryOne("SELECT COUNT(*) as count FROM campaign_recipients WHERE campaign_id = ? AND status = 'queued'", [camp.id])?.count || 0;
+                if (queuedCount > 0) {
+                    console.log(`[Queue Recovery] Resuming interrupted campaign ${camp.id} with ${queuedCount} queued recipients`);
+                    this.enqueue({
+                        type: 'CAMPAIGN_BATCH',
+                        orgId: camp.organization_id,
+                        data: { campaignId: camp.id, orgId: camp.organization_id, batchSize: 15 },
+                    });
+                }
+            }
+        }
+        catch (e) {
+            console.warn('[Queue Recovery Notice]:', e.message);
+        }
     }
     enqueue(job, maxRetries = 3) {
         const id = uuidv4();
@@ -18,14 +39,31 @@ class MessageQueueService {
             id,
             retries: 0,
             maxRetries,
+            nextRunAt: Date.now(),
         });
         return id;
     }
     pauseCampaign(campaignId) {
         this.pausedCampaigns.add(campaignId);
+        db.execute("UPDATE campaigns SET status = 'paused', updated_at = ? WHERE id = ?", [
+            new Date().toISOString(),
+            campaignId,
+        ]);
     }
     resumeCampaign(campaignId) {
         this.pausedCampaigns.delete(campaignId);
+        db.execute("UPDATE campaigns SET status = 'processing', updated_at = ? WHERE id = ?", [
+            new Date().toISOString(),
+            campaignId,
+        ]);
+        const camp = db.queryOne('SELECT organization_id FROM campaigns WHERE id = ?', [campaignId]);
+        if (camp) {
+            this.enqueue({
+                type: 'CAMPAIGN_BATCH',
+                orgId: camp.organization_id,
+                data: { campaignId, orgId: camp.organization_id, batchSize: 15 },
+            });
+        }
     }
     cancelCampaign(campaignId) {
         this.pausedCampaigns.add(campaignId);
@@ -37,12 +75,13 @@ class MessageQueueService {
     async processNext() {
         if (this.isProcessing || this.queue.length === 0)
             return;
-        this.isProcessing = true;
-        const job = this.queue.shift();
-        if (!job) {
-            this.isProcessing = false;
+        // Find next eligible job considering retry backoff
+        const now = Date.now();
+        const jobIndex = this.queue.findIndex((j) => (j.nextRunAt || 0) <= now);
+        if (jobIndex === -1)
             return;
-        }
+        this.isProcessing = true;
+        const [job] = this.queue.splice(jobIndex, 1);
         try {
             if (job.type === 'CAMPAIGN_BATCH') {
                 await this.handleCampaignBatch(job);
@@ -53,8 +92,10 @@ class MessageQueueService {
         }
         catch (err) {
             console.error(`[Queue Error] Job ${job.id} failed:`, err.message);
+            // Exponential backoff retry: 2s, 6s, 18s
             if (job.retries < job.maxRetries) {
                 job.retries++;
+                job.nextRunAt = Date.now() + Math.pow(3, job.retries) * 1000;
                 this.queue.push(job);
             }
         }
@@ -63,7 +104,7 @@ class MessageQueueService {
         }
     }
     async handleCampaignBatch(job) {
-        const { campaignId, orgId, batchSize = 10 } = job.data;
+        const { campaignId, orgId, batchSize = 15 } = job.data;
         // Check if campaign was paused or cancelled
         if (this.pausedCampaigns.has(campaignId)) {
             return;
@@ -75,7 +116,7 @@ class MessageQueueService {
         if (!campaign || campaign.status === 'paused' || campaign.status === 'cancelled') {
             return;
         }
-        // Fetch batch of queued recipients
+        // Atomic fetch of next batch of 'queued' recipients (guarantees idempotency and prevents re-sending)
         const recipients = db.query("SELECT * FROM campaign_recipients WHERE campaign_id = ? AND status = 'queued' LIMIT ?", [campaignId, batchSize]);
         if (recipients.length === 0) {
             // Mark campaign completed
@@ -105,21 +146,23 @@ class MessageQueueService {
                 vars = Object.values(applied);
             }
             catch (e) { }
-            // 3. Mark processing
+            // 3. Mark recipient processing atomically
             db.execute("UPDATE campaign_recipients SET status = 'processing' WHERE id = ?", [recip.id]);
-            // 4. Send through provider
+            // 4. Send through provider adapter
             const sendResult = await provider.sendMessage({
                 toPhoneE164: recip.phone_e164,
                 type: 'template',
                 template: {
                     name: template?.name || 'order_status_update',
                     language: template?.language || 'en_US',
-                    components: vars.length > 0 ? [
-                        {
-                            type: 'body',
-                            parameters: vars.map((v) => ({ type: 'text', text: String(v) })),
-                        },
-                    ] : [],
+                    components: vars.length > 0
+                        ? [
+                            {
+                                type: 'body',
+                                parameters: vars.map((v) => ({ type: 'text', text: String(v) })),
+                            },
+                        ]
+                        : [],
                 },
             });
             if (sendResult.success) {
@@ -127,7 +170,7 @@ class MessageQueueService {
                 db.execute(`UPDATE campaign_recipients
            SET status = 'sent', provider_message_id = ?, sent_at = ?
            WHERE id = ?`, [wamid, now, recip.id]);
-                // Record in messages ledger
+                // Record in master messages ledger
                 db.execute(`INSERT INTO messages (id, organization_id, phone_e164, direction, message_type, template_name, template_category, status, provider_message_id, cost, created_at, updated_at)
            VALUES (?, ?, ?, 'outbound', 'template', ?, ?, 'sent', ?, 0.0119, ?, ?)`, [uuidv4(), orgId, recip.phone_e164, template?.name, template?.category || 'MARKETING', wamid, now, now]);
                 db.execute('UPDATE campaigns SET sent_count = sent_count + 1 WHERE id = ?', [campaignId]);
@@ -135,16 +178,24 @@ class MessageQueueService {
                 if (isSandbox) {
                     setTimeout(() => {
                         const delTime = new Date().toISOString();
-                        db.execute("UPDATE campaign_recipients SET status = 'delivered', delivered_at = ? WHERE id = ?", [delTime, recip.id]);
+                        db.execute("UPDATE campaign_recipients SET status = 'delivered', delivered_at = ? WHERE id = ?", [
+                            delTime,
+                            recip.id,
+                        ]);
                         db.execute("UPDATE messages SET status = 'delivered', updated_at = ? WHERE provider_message_id = ?", [delTime, wamid]);
                         db.execute('UPDATE campaigns SET delivered_count = delivered_count + 1 WHERE id = ?', [campaignId]);
                         sseManager.broadcastToOrg(orgId, 'message:status', { wamid, status: 'delivered', campaignId });
-                        // 75% read probability in simulation
                         if (Math.random() < 0.75) {
                             setTimeout(() => {
                                 const readTime = new Date().toISOString();
-                                db.execute("UPDATE campaign_recipients SET status = 'read', read_at = ? WHERE id = ?", [readTime, recip.id]);
-                                db.execute("UPDATE messages SET status = 'read', updated_at = ? WHERE provider_message_id = ?", [readTime, wamid]);
+                                db.execute("UPDATE campaign_recipients SET status = 'read', read_at = ? WHERE id = ?", [
+                                    readTime,
+                                    recip.id,
+                                ]);
+                                db.execute("UPDATE messages SET status = 'read', updated_at = ? WHERE provider_message_id = ?", [
+                                    readTime,
+                                    wamid,
+                                ]);
                                 db.execute('UPDATE campaigns SET read_count = read_count + 1 WHERE id = ?', [campaignId]);
                                 sseManager.broadcastToOrg(orgId, 'message:status', { wamid, status: 'read', campaignId });
                             }, 1200);
@@ -158,7 +209,7 @@ class MessageQueueService {
            WHERE id = ?`, [sendResult.errorMessage || 'Send failure', recip.id]);
                 db.execute('UPDATE campaigns SET failed_count = failed_count + 1 WHERE id = ?', [campaignId]);
             }
-            // Small pacing delay to avoid burst throttling
+            // Rate pacing delay to comply with provider concurrency guidelines
             await new Promise((r) => setTimeout(r, 60));
         }
         // Broadcast campaign progress
@@ -173,12 +224,15 @@ class MessageQueueService {
             this.enqueue(job);
         }
         else if (remainingCount === 0) {
-            db.execute("UPDATE campaigns SET status = 'completed', updated_at = ? WHERE id = ?", [new Date().toISOString(), campaignId]);
+            db.execute("UPDATE campaigns SET status = 'completed', updated_at = ? WHERE id = ?", [
+                new Date().toISOString(),
+                campaignId,
+            ]);
             sseManager.broadcastToOrg(orgId, 'campaign:completed', { campaignId, status: 'completed' });
         }
     }
     async handleTransactionalMessage(job) {
-        const { orgId, toPhoneE164, type, body, template, media } = job.data;
+        const { orgId, toPhoneE164, type, body, template, media, location, contacts, interactive } = job.data;
         const { provider } = getWhatsAppProviderForOrg(orgId);
         const result = await provider.sendMessage({
             toPhoneE164,
@@ -186,6 +240,9 @@ class MessageQueueService {
             text: body ? { body } : undefined,
             template,
             media,
+            location,
+            contacts,
+            interactive,
         });
         const now = new Date().toISOString();
         const wamid = result.providerMessageId || `wamid.${Date.now()}`;

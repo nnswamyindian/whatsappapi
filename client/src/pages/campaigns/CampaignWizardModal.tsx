@@ -339,6 +339,8 @@ export const CampaignWizardModal: React.FC<CampaignWizardModalProps> = ({
                     footerText={selectedTemplate.footer_text}
                     buttons={selectedTemplate.buttons}
                     variables={['Sarah', '40', 'FESTIVE40']}
+                    isCarousel={Boolean(selectedTemplate.isCarousel)}
+                    cards={selectedTemplate.cards || []}
                   />
                 )}
               </div>

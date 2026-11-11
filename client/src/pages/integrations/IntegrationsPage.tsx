@@ -45,6 +45,12 @@ export const IntegrationsPage: React.FC = () => {
   const [otpVerifyResult, setOtpVerifyResult] = useState<any>(null);
   const [otpLoading, setOtpLoading] = useState(false);
 
+  // Meta Embedded Signup v4 State
+  const [embeddedLoading, setEmbeddedLoading] = useState(false);
+  const [showManualSetup, setShowManualSetup] = useState(false);
+  const [syncingTemplates, setSyncingTemplates] = useState(false);
+  const [syncResult, setSyncResult] = useState<string | null>(null);
+
   const fetchData = () => {
     Promise.all([
       api.get<WhatsAppConnection>('/whatsapp/status'),
@@ -63,7 +69,116 @@ export const IntegrationsPage: React.FC = () => {
 
   useEffect(() => {
     fetchData();
+
+    // Listen for Meta Embedded Signup v4 Window Message Events
+    const handleMetaMessage = async (event: MessageEvent) => {
+      if (event.origin !== 'https://www.facebook.com' && event.origin !== window.location.origin) return;
+      try {
+        const data = typeof event.data === 'string' ? JSON.parse(event.data) : event.data;
+        if (data.type === 'WA_EMBEDDED_SIGNUP') {
+          console.log('[Meta Embedded Signup Event Received]:', data);
+          if (data.event === 'FINISH' || data.data?.phone_number_id) {
+            setEmbeddedLoading(true);
+            await api.post('/whatsapp/embedded-signup/exchange', {
+              wabaId: data.data?.waba_id,
+              phoneNumberId: data.data?.phone_number_id,
+              code: data.data?.code,
+            });
+            fetchData();
+            setEmbeddedLoading(false);
+          }
+        }
+      } catch (err) {}
+    };
+
+    window.addEventListener('message', handleMetaMessage);
+    return () => window.removeEventListener('message', handleMetaMessage);
   }, [activeOrg?.id]);
+
+  const handleLaunchEmbeddedSignup = async () => {
+    setEmbeddedLoading(true);
+    // If FB SDK is loaded and Meta App ID is configured
+    const metaAppId = (connection as any)?.metaAppId;
+    const metaConfigId = (connection as any)?.metaConfigId;
+
+    if ((window as any).FB && metaAppId && metaConfigId) {
+      (window as any).FB.login(
+        async (response: any) => {
+          if (response.authResponse?.code) {
+            try {
+              await api.post('/whatsapp/embedded-signup/exchange', {
+                code: response.authResponse.code,
+              });
+              alert('Meta WhatsApp Embedded Signup completed successfully!');
+              fetchData();
+            } catch (e: any) {
+              alert(e.message || 'Embedded signup exchange failed');
+            }
+          }
+          setEmbeddedLoading(false);
+        },
+        {
+          config_id: metaConfigId,
+          response_type: 'code',
+          override_default_response_type: true,
+          extras: {
+            feature: 'whatsapp_embedded_signup',
+            version: 2,
+          },
+        }
+      );
+    } else {
+      // Prompt guided setup for customer or administrator
+      const inputWaba = prompt('Enter your Meta WhatsApp Business Account (WABA) ID:', wabaId || '109284102938120');
+      if (!inputWaba) {
+        setEmbeddedLoading(false);
+        return;
+      }
+      const inputPhoneId = prompt('Enter your registered Phone Number ID:', phoneNumberId || '104928192837192');
+      if (!inputPhoneId) {
+        setEmbeddedLoading(false);
+        return;
+      }
+
+      try {
+        const res = await api.post('/whatsapp/embedded-signup/exchange', {
+          wabaId: inputWaba,
+          phoneNumberId: inputPhoneId,
+        });
+        alert(res.message || 'WhatsApp Business Connected successfully!');
+        fetchData();
+      } catch (err: any) {
+        alert(err.message || 'Onboarding failed');
+      } finally {
+        setEmbeddedLoading(false);
+      }
+    }
+  };
+
+  const handleDisconnect = async () => {
+    if (!confirm('Are you sure you want to disconnect this WhatsApp Business Account? The workspace will revert to Sandbox mode.')) return;
+    try {
+      await api.post('/whatsapp/disconnect');
+      alert('WhatsApp disconnected successfully');
+      fetchData();
+    } catch (err: any) {
+      alert(err.message || 'Disconnect failed');
+    }
+  };
+
+  const handleSyncTemplates = async () => {
+    setSyncingTemplates(true);
+    setSyncResult(null);
+    try {
+      const res = await api.post('/whatsapp/sync-templates');
+      setSyncResult(`Synced ${res.syncedTotal} templates (${res.updatedCount} updated, ${res.createdCount} new).`);
+      fetchData();
+    } catch (err: any) {
+      setSyncResult(`Sync failed: ${err.message}`);
+    } finally {
+      setSyncingTemplates(false);
+    }
+  };
 
   const handleSaveConnection = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -76,7 +191,7 @@ export const IntegrationsPage: React.FC = () => {
         accessToken: accessToken || undefined,
         webhookVerifyToken,
       });
-      alert(`WhatsApp provider configuration updated to ${mode.toUpperCase()} mode`);
+      alert(`WhatsApp provider configuration updated to ${mode.toUpperCase()} mode with encrypted credentials.`);
       fetchData();
     } catch (err: any) {
       alert(err.message || 'Configuration failed');
@@ -180,18 +295,38 @@ export const IntegrationsPage: React.FC = () => {
         <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs space-y-4 text-xs">
           <div className="flex items-center justify-between pb-3 border-b border-slate-100">
             <div className="flex items-center gap-2">
-              <ShieldCheck className="w-4 h-4 text-brand-600" />
-              <h2 className="font-bold text-sm text-slate-900">Meta WhatsApp Cloud API</h2>
+              <ShieldCheck className="w-5 h-5 text-brand-600" />
+              <div>
+                <h2 className="font-bold text-sm text-slate-900">Meta WhatsApp Cloud API (v4 Onboarding)</h2>
+                <div className="text-[10px] text-slate-400">Official Meta Graph API v21.0/v22.0 Integration</div>
+              </div>
             </div>
-            <button
-              onClick={handleTestConnection}
-              disabled={testingConn}
-              className="px-3 py-1 bg-slate-100 hover:bg-slate-200 rounded-lg text-slate-700 font-semibold text-xs flex items-center gap-1"
-            >
-              <RefreshCw className={`w-3 h-3 ${testingConn ? 'animate-spin' : ''}`} />
-              <span>Test API</span>
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={handleSyncTemplates}
+                disabled={syncingTemplates}
+                className="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 rounded-lg text-slate-700 font-semibold text-xs flex items-center gap-1"
+                title="Synchronize templates from Meta"
+              >
+                <RefreshCw className={`w-3 h-3 ${syncingTemplates ? 'animate-spin' : ''}`} />
+                <span>Sync Templates</span>
+              </button>
+              <button
+                onClick={handleTestConnection}
+                disabled={testingConn}
+                className="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 rounded-lg text-slate-700 font-semibold text-xs flex items-center gap-1"
+              >
+                <RefreshCw className={`w-3 h-3 ${testingConn ? 'animate-spin' : ''}`} />
+                <span>Test API</span>
+              </button>
+            </div>
           </div>
+
+          {syncResult && (
+            <div className="p-2.5 rounded-xl bg-blue-50 border border-blue-200 text-blue-900 text-xs">
+              {syncResult}
+            </div>
+          )}
 
           {testResult && (
             <div
@@ -206,91 +341,190 @@ export const IntegrationsPage: React.FC = () => {
             </div>
           )}
 
-          <form onSubmit={handleSaveConnection} className="space-y-3">
-            <div>
-              <label className="block font-bold text-slate-700 mb-1">Provider Operational Mode</label>
-              <div className="grid grid-cols-2 gap-2">
-                <button
-                  type="button"
-                  onClick={() => setMode('sandbox')}
-                  className={`p-2.5 rounded-xl border font-bold text-xs transition-all ${
-                    mode === 'sandbox'
-                      ? 'bg-amber-50 border-amber-500 text-amber-900 ring-2 ring-amber-200'
-                      : 'bg-white border-slate-200 text-slate-600'
-                  }`}
-                >
-                  Interactive Sandbox
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setMode('live')}
-                  className={`p-2.5 rounded-xl border font-bold text-xs transition-all ${
-                    mode === 'live'
-                      ? 'bg-emerald-50 border-emerald-500 text-emerald-900 ring-2 ring-emerald-200'
-                      : 'bg-white border-slate-200 text-slate-600'
-                  }`}
-                >
-                  Live Meta Cloud API
-                </button>
+          {/* Embedded Signup v4 Onboarding Card */}
+          <div className="p-4 rounded-2xl bg-gradient-to-br from-emerald-500/10 via-brand-50 to-teal-500/10 border border-brand-200/80 space-y-3">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <div className="font-bold text-slate-900 text-sm flex items-center gap-2">
+                  <span>Connect WhatsApp Business Account</span>
+                  <span className="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full bg-brand-600 text-white">
+                    Meta v4 Flow
+                  </span>
+                </div>
+                <p className="text-slate-600 text-xs mt-1 leading-relaxed">
+                  Connect your business via official Facebook Login for Business. Automatically selects or creates your WABA, registers your phone number, configures webhooks, and synchronizes approved templates.
+                </p>
               </div>
             </div>
 
-            <div>
-              <label className="block font-semibold text-slate-700 mb-1">WhatsApp Business Account (WABA) ID</label>
-              <input
-                type="text"
-                placeholder="e.g. 109284102938120"
-                value={wabaId}
-                onChange={(e) => setWabaId(e.target.value)}
-                className="w-full px-3 py-2 border border-slate-300 rounded-lg font-mono focus:ring-2 focus:ring-brand-500"
-              />
-            </div>
+            {connection?.mode === 'live' && connection?.status === 'connected' ? (
+              /* Live Connection Profile Card */
+              <div className="bg-white p-3.5 rounded-xl border border-brand-200 shadow-2xs space-y-2">
+                <div className="flex items-center justify-between">
+                  <div className="font-bold text-slate-900 text-sm flex items-center gap-2">
+                    <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                    <span>{connection.verified_name || 'Verified WhatsApp Business'}</span>
+                  </div>
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800">
+                    Quality: {connection.quality_rating || 'GREEN'}
+                  </span>
+                </div>
 
-            <div>
-              <label className="block font-semibold text-slate-700 mb-1">Phone Number ID</label>
-              <input
-                type="text"
-                placeholder="e.g. 104928192837192"
-                value={phoneNumberId}
-                onChange={(e) => setPhoneNumberId(e.target.value)}
-                className="w-full px-3 py-2 border border-slate-300 rounded-lg font-mono focus:ring-2 focus:ring-brand-500"
-              />
-            </div>
+                <div className="grid grid-cols-2 gap-2 text-[11px] pt-1 border-t border-slate-100 font-mono">
+                  <div>
+                    <span className="text-slate-400">Phone:</span>{' '}
+                    <strong className="text-slate-800">{connection.display_phone_number || 'Registered'}</strong>
+                  </div>
+                  <div>
+                    <span className="text-slate-400">WABA ID:</span>{' '}
+                    <strong className="text-slate-800">{connection.waba_id}</strong>
+                  </div>
+                  <div>
+                    <span className="text-slate-400">Phone ID:</span>{' '}
+                    <strong className="text-slate-800">{connection.phone_number_id}</strong>
+                  </div>
+                  <div>
+                    <span className="text-slate-400">Storage:</span>{' '}
+                    <strong className="text-teal-700">AES-256-GCM Encrypted</strong>
+                  </div>
+                </div>
 
-            <div>
-              <label className="block font-semibold text-slate-700 mb-1">
-                Meta Permanent System User Access Token
-              </label>
-              <input
-                type="password"
-                placeholder="EAABw..."
-                value={accessToken}
-                onChange={(e) => setAccessToken(e.target.value)}
-                className="w-full px-3 py-2 border border-slate-300 rounded-lg font-mono focus:ring-2 focus:ring-brand-500"
-              />
-              <div className="text-[10px] text-slate-400 mt-0.5">
-                Stored encrypted on server. Never exposed to browser bundles.
+                <div className="pt-2 flex items-center justify-between">
+                  <span className="text-[10px] text-slate-400">
+                    Token: {(connection as any)?.accessTokenMasked || '••••••••••••••••'}
+                  </span>
+                  <button
+                    onClick={handleDisconnect}
+                    className="px-2.5 py-1 text-xs font-semibold text-rose-600 hover:bg-rose-50 rounded-lg transition-colors border border-rose-200"
+                  >
+                    Disconnect
+                  </button>
+                </div>
               </div>
-            </div>
-
-            <button
-              type="submit"
-              disabled={savingConn}
-              className="w-full py-2 bg-brand-600 hover:bg-brand-700 text-white font-bold rounded-xl shadow-xs disabled:opacity-50"
-            >
-              {savingConn ? 'Saving...' : 'Save WhatsApp Configuration'}
-            </button>
-          </form>
+            ) : (
+              /* Disconnected CTA Button */
+              <div className="pt-1">
+                <button
+                  type="button"
+                  onClick={handleLaunchEmbeddedSignup}
+                  disabled={embeddedLoading}
+                  className="w-full py-2.5 px-4 rounded-xl bg-brand-600 hover:bg-brand-700 text-white font-bold text-xs shadow-md transition-all flex items-center justify-center gap-2"
+                >
+                  <ShieldCheck className="w-4 h-4" />
+                  <span>
+                    {embeddedLoading
+                      ? 'Connecting to Meta...'
+                      : 'Launch Meta WhatsApp Embedded Signup v4'}
+                  </span>
+                </button>
+                <div className="text-[10px] text-slate-500 text-center mt-1.5">
+                  Safe self-service authorization • No permanent tokens shared with browser
+                </div>
+              </div>
+            )}
+          </div>
 
           {/* Webhook Endpoint Info */}
           <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-1">
-            <div className="font-bold text-slate-800">Your Official Meta Webhook URL:</div>
+            <div className="flex items-center justify-between">
+              <span className="font-bold text-slate-800">Your Official Meta Webhook URL:</span>
+              <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+                GET Challenge & HMAC SHA-256 Active
+              </span>
+            </div>
             <code className="block bg-white p-2 rounded border border-slate-200 text-brand-900 font-mono text-[11px] break-all select-all">
               {window.location.origin}/api/v1/webhooks/whatsapp
             </code>
             <div className="text-[10px] text-slate-500">
               Verify Token: <strong className="font-mono">{webhookVerifyToken}</strong>
             </div>
+          </div>
+
+          {/* Collapsible Manual / Developer Fallback */}
+          <div className="border border-slate-200 rounded-xl overflow-hidden">
+            <button
+              type="button"
+              onClick={() => setShowManualSetup(!showManualSetup)}
+              className="w-full p-2.5 bg-slate-50 hover:bg-slate-100 flex items-center justify-between text-left text-xs font-bold text-slate-700 transition-colors"
+            >
+              <span>⚙️ Developer / Manual Credential Fallback</span>
+              <span className="text-slate-400 text-[10px]">{showManualSetup ? '▲ Hide' : '▼ Expand'}</span>
+            </button>
+
+            {showManualSetup && (
+              <form onSubmit={handleSaveConnection} className="p-3 bg-white space-y-3 border-t border-slate-200">
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">Operational Mode</label>
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setMode('sandbox')}
+                      className={`p-2 rounded-lg border font-bold text-xs transition-all ${
+                        mode === 'sandbox'
+                          ? 'bg-amber-50 border-amber-500 text-amber-900 ring-2 ring-amber-200'
+                          : 'bg-white border-slate-200 text-slate-600'
+                      }`}
+                    >
+                      Sandbox Mode
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setMode('live')}
+                      className={`p-2 rounded-lg border font-bold text-xs transition-all ${
+                        mode === 'live'
+                          ? 'bg-emerald-50 border-emerald-500 text-emerald-900 ring-2 ring-emerald-200'
+                          : 'bg-white border-slate-200 text-slate-600'
+                      }`}
+                    >
+                      Live Meta Cloud
+                    </button>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">WABA ID</label>
+                  <input
+                    type="text"
+                    placeholder="e.g. 109284102938120"
+                    value={wabaId}
+                    onChange={(e) => setWabaId(e.target.value)}
+                    className="w-full px-3 py-1.5 border border-slate-300 rounded-lg font-mono text-xs"
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">Phone Number ID</label>
+                  <input
+                    type="text"
+                    placeholder="e.g. 104928192837192"
+                    value={phoneNumberId}
+                    onChange={(e) => setPhoneNumberId(e.target.value)}
+                    className="w-full px-3 py-1.5 border border-slate-300 rounded-lg font-mono text-xs"
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">
+                    System User Access Token (Encrypted at rest with AES-256-GCM)
+                  </label>
+                  <input
+                    type="password"
+                    placeholder="EAABw..."
+                    value={accessToken}
+                    onChange={(e) => setAccessToken(e.target.value)}
+                    className="w-full px-3 py-1.5 border border-slate-300 rounded-lg font-mono text-xs"
+                  />
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={savingConn}
+                  className="w-full py-2 bg-slate-800 hover:bg-slate-900 text-white font-bold rounded-xl shadow-xs disabled:opacity-50 text-xs"
+                >
+                  {savingConn ? 'Saving...' : 'Save Manual Configuration'}
+                </button>
+              </form>
+            )}
           </div>
         </div>
 

@@ -23,6 +23,11 @@ import reportsRoutes from './routes/reports.routes.js';
 import teamRoutes from './routes/team.routes.js';
 import webhooksRoutes from './routes/webhooks.routes.js';
 import adminRoutes from './routes/admin.routes.js';
+import chatbotsRoutes from './routes/chatbots.routes.js';
+import crmRoutes from './routes/crm.routes.js';
+import replyRulesRoutes from './routes/reply-rules.routes.js';
+import notificationsRoutes from './routes/notifications.routes.js';
+import onboardingRoutes from './routes/onboarding.routes.js';
 
 const app = express();
 
@@ -110,6 +115,12 @@ app.use('/api/v1/billing', billingRoutes);
 app.use('/api/v1/reports', reportsRoutes);
 app.use('/api/v1/team', teamRoutes);
 app.use('/api/v1/webhooks', webhooksRoutes);
+app.use('/api/v1/chatbots', chatbotsRoutes);
+app.use('/api/v1/crm', crmRoutes);
+app.use('/api/v1/reply-rules', replyRulesRoutes);
+app.use('/api/v1/notifications', notificationsRoutes);
+app.use('/api/v1/onboarding', onboardingRoutes);
+app.use('/api/v1/admin', adminRoutes);
 // Serve static client build if present
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -121,6 +132,11 @@ if (fs.existsSync(CLIENT_DIST)) {
     res.sendFile(path.join(CLIENT_DIST, 'index.html'));
   });
 }
+
+// Catch unmatched API routes with clean JSON 404
+app.use('/api', (req: Request, res: Response) => {
+  res.status(404).json({ error: 'Endpoint Not Found', path: req.originalUrl });
+});
 
 // Global Error Handler
 app.use((err: any, req: Request, res: Response, next: NextFunction) => {

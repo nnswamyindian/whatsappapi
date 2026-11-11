@@ -1,10 +1,16 @@
-import { IWhatsAppProvider, SendMessageOptions, SendMessageResult, TemplateSyncItem, WhatsAppAccountMetrics } from './provider-interface.js';
+import {
+  IWhatsAppProvider,
+  SendMessageOptions,
+  SendMessageResult,
+  TemplateSyncItem,
+  WhatsAppAccountMetrics,
+} from './provider-interface.js';
 import { v4 as uuidv4 } from 'uuid';
 
 export class MockWhatsAppProvider implements IWhatsAppProvider {
   private simulateDelayMs: number;
 
-  constructor(simulateDelayMs: number = 300) {
+  constructor(simulateDelayMs: number = 250) {
     this.simulateDelayMs = simulateDelayMs;
   }
 
@@ -30,7 +36,7 @@ export class MockWhatsAppProvider implements IWhatsAppProvider {
   }
 
   async fetchTemplates(): Promise<TemplateSyncItem[]> {
-    await new Promise((resolve) => setTimeout(resolve, 200));
+    await new Promise((resolve) => setTimeout(resolve, 150));
     return [
       {
         id: 'mock_tpl_001',
@@ -42,6 +48,10 @@ export class MockWhatsAppProvider implements IWhatsAppProvider {
         headerContent: 'Order {{1}} Dispatched',
         bodyText: 'Hi {{2}}, your order {{1}} has been shipped via {{3}}! Track your live package below.',
         footerText: 'Thank you for shopping with us.',
+        buttons: [
+          { type: 'URL', text: 'Track Package', url: 'https://greenwave.io/track' },
+          { type: 'QUICK_REPLY', text: 'Help & Support' },
+        ],
       },
       {
         id: 'mock_tpl_002',
@@ -53,6 +63,10 @@ export class MockWhatsAppProvider implements IWhatsAppProvider {
         headerContent: 'https://images.unsplash.com/photo-1607082348824-0a96f2a4b9da?w=800',
         bodyText: 'Hi {{1}}, get ready! Our exclusive VIP Festival Sale is live with flat {{2}}% OFF on all premium collections. Use promo code {{3}} at checkout.',
         footerText: 'Valid until Sunday midnight. Reply STOP to opt out.',
+        buttons: [
+          { type: 'URL', text: 'Shop Now', url: 'https://greenwave.io/sale' },
+          { type: 'QUICK_REPLY', text: 'Unsubscribe' },
+        ],
       },
       {
         id: 'mock_tpl_003',
@@ -61,8 +75,38 @@ export class MockWhatsAppProvider implements IWhatsAppProvider {
         language: 'en_US',
         status: 'APPROVED',
         headerType: 'NONE',
-        bodyText: 'Your GreenWave single-use verification code is {{1}}. Valid for {{2}} minutes.',
+        bodyText: 'Your GreenWave single-use verification code is {{1}}. Valid for {{2}} minutes. For security, never share this code.',
         footerText: 'Secured by GreenWave Auth Engine.',
+        buttons: [
+          { type: 'QUICK_REPLY', text: 'Copy Code' },
+        ],
+      },
+      {
+        id: 'mock_tpl_004',
+        name: 'product_carousel_showcase_v1',
+        category: 'MARKETING',
+        language: 'en_US',
+        status: 'APPROVED',
+        headerType: 'NONE',
+        bodyText: 'Explore our top featured arrivals this season! Swipe through to discover items tailored for you.',
+        footerText: 'GreenWave Catalog',
+        isCarousel: true,
+        cards: [
+          {
+            cardIndex: 0,
+            headerType: 'IMAGE',
+            headerUrl: 'https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=600',
+            bodyText: 'Premium Chrono Watch - 20% OFF today!',
+            buttons: [{ type: 'URL', text: 'View Watch', url: 'https://greenwave.io/item/watch' }],
+          },
+          {
+            cardIndex: 1,
+            headerType: 'IMAGE',
+            headerUrl: 'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=600',
+            bodyText: 'Wireless ANC Headphones - Studio clarity sound.',
+            buttons: [{ type: 'URL', text: 'View Audio', url: 'https://greenwave.io/item/audio' }],
+          },
+        ],
       },
     ];
   }
@@ -73,7 +117,7 @@ export class MockWhatsAppProvider implements IWhatsAppProvider {
     language: string;
     components: any[];
   }): Promise<{ id: string; status: string }> {
-    await new Promise((resolve) => setTimeout(resolve, 400));
+    await new Promise((resolve) => setTimeout(resolve, 300));
     return {
       id: `mock_meta_tpl_${Date.now()}`,
       status: 'APPROVED', // Sandbox auto-approves for immediate testing
@@ -87,6 +131,8 @@ export class MockWhatsAppProvider implements IWhatsAppProvider {
       verifiedName: 'GreenWave Sandbox Verified Business',
       displayPhoneNumber: '+1 (555) 019-2834',
       codeVerificationStatus: 'VERIFIED',
+      nameStatus: 'APPROVED',
+      accountStatus: 'CONNECTED',
     };
   }
 
@@ -98,6 +144,8 @@ export class MockWhatsAppProvider implements IWhatsAppProvider {
         mode: 'sandbox',
         simulatedTier: 'TIER_10K',
         quality: 'GREEN',
+        phone: '+1 (555) 019-2834',
+        name: 'GreenWave Sandbox Verified Business',
       },
     };
   }

@@ -146,6 +146,11 @@ export const TemplatesPage: React.FC = () => {
                     <div className="flex items-center gap-2">
                       <span className="font-bold text-xs text-slate-900">{t.name}</span>
                       <StatusBadge status={t.status} size="sm" />
+                      {t.isCarousel && (
+                        <span className="bg-purple-50 text-purple-700 border border-purple-200 text-[10px] font-bold px-2 py-0.5 rounded-full">
+                          Carousel ({t.cards?.length || 2} cards)
+                        </span>
+                      )}
                     </div>
                     <div className="flex items-center gap-2 text-[11px] text-slate-500 font-medium">
                       <span className="bg-slate-100 px-2 py-0.5 rounded text-slate-700 font-semibold">
@@ -164,7 +169,19 @@ export const TemplatesPage: React.FC = () => {
                     )}
                   </div>
 
-                  <span className="text-xs text-brand-700 font-semibold">Preview &rarr;</span>
+                  <div className="flex items-center gap-2">
+                    <a
+                      href={`/api/v1/contacts/samples/template/${t.id}`}
+                      target="_blank"
+                      rel="noreferrer"
+                      onClick={(e) => e.stopPropagation()}
+                      className="text-[11px] font-semibold text-slate-600 hover:text-brand-700 bg-slate-100 hover:bg-slate-200 px-2.5 py-1 rounded-lg"
+                      title="Download Sample CSV for this template"
+                    >
+                      Sample CSV
+                    </a>
+                    <span className="text-xs text-brand-700 font-semibold">Preview &rarr;</span>
+                  </div>
                 </div>
               ))}
             </div>
@@ -187,6 +204,8 @@ export const TemplatesPage: React.FC = () => {
                 footerText={previewTemplate.footer_text}
                 buttons={previewTemplate.buttons}
                 variables={['Customer', '40', 'FESTIVE40']}
+                isCarousel={Boolean(previewTemplate.isCarousel)}
+                cards={previewTemplate.cards || []}
               />
             </div>
           ) : (

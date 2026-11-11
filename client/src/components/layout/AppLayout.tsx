@@ -8,7 +8,7 @@ import { useAuth } from '../../context/AuthContext';
 import { WhatsAppConnection } from '../../types';
 import { Info, Sparkles, X, CreditCard } from 'lucide-react';
 
-export const AppLayout: React.FC = () => {
+export const AppLayout: React.FC<{ children?: React.ReactNode }> = ({ children }) => {
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [topupModalOpen, setTopupModalOpen] = useState(false);
   const [connection, setConnection] = useState<WhatsAppConnection | null>(null);
@@ -69,7 +69,7 @@ export const AppLayout: React.FC = () => {
         <Sidebar isOpen={mobileSidebarOpen} onClose={() => setMobileSidebarOpen(false)} />
 
         <main className="flex-1 p-4 md:p-6 lg:p-8 min-w-0 overflow-y-auto">
-          <Outlet />
+          {children || <Outlet />}
         </main>
       </div>
 

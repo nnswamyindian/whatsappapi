@@ -3,6 +3,8 @@ import { MetaCloudApiProvider } from './meta-cloud-api.js';
 import { MockWhatsAppProvider } from './mock-provider.js';
 import { db } from '../../db/index.js';
 
+import { decryptSecret } from '../../utils/crypto.js';
+
 export function getWhatsAppProviderForOrg(orgId: string): { provider: IWhatsAppProvider; isSandbox: boolean } {
   const conn = db.queryOne<{
     provider: string;
@@ -22,11 +24,12 @@ export function getWhatsAppProviderForOrg(orgId: string): { provider: IWhatsAppP
     conn.phone_number_id &&
     conn.waba_id
   ) {
+    const rawToken = decryptSecret(conn.access_token);
     return {
       provider: new MetaCloudApiProvider({
         phoneNumberId: conn.phone_number_id,
         wabaId: conn.waba_id,
-        accessToken: conn.access_token,
+        accessToken: rawToken,
       }),
       isSandbox: false,
     };
