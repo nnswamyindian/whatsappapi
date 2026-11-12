@@ -48,16 +48,16 @@ export const AppLayout: React.FC<{ children?: React.ReactNode }> = ({ children }
 
       {/* Labelled Sandbox Mode Banner */}
       {isSandbox && (
-        <div className="bg-amber-50 border-b border-amber-200 px-4 py-2 text-xs text-amber-900 flex items-center justify-between">
-          <div className="flex items-center gap-2 max-w-4xl">
+        <div className="bg-amber-50 border-b border-amber-200 px-3 sm:px-4 py-2 text-xs text-amber-900 flex flex-col sm:flex-row sm:items-center justify-between gap-1.5 sm:gap-2 w-full">
+          <div className="flex items-center gap-2 min-w-0">
             <Info className="w-4 h-4 text-amber-600 shrink-0" />
-            <span>
-              <strong>Sandbox Testing Mode Active:</strong> WhatsApp message deliveries, reads, and template approvals are realistically simulated. No charges will be billed by Meta.
+            <span className="text-[11px] sm:text-xs leading-tight">
+              <strong>Sandbox Testing Mode Active:</strong> WhatsApp message deliveries and approvals are simulated with zero Meta charges.
             </span>
           </div>
           <Link
             to="/integrations"
-            className="font-semibold text-amber-800 underline hover:text-amber-950 whitespace-nowrap ml-2"
+            className="font-bold text-amber-800 underline hover:text-amber-950 text-[11px] sm:text-xs self-start sm:self-auto shrink-0"
           >
             Connect Live Cloud API &rarr;
           </Link>
@@ -65,10 +65,10 @@ export const AppLayout: React.FC<{ children?: React.ReactNode }> = ({ children }
       )}
 
       {/* Main Layout Container */}
-      <div className="flex-1 flex max-w-[1600px] w-full mx-auto pb-16 md:pb-6">
+      <div className="flex-1 flex max-w-[1600px] w-full mx-auto pb-16 md:pb-6 overflow-x-hidden">
         <Sidebar isOpen={mobileSidebarOpen} onClose={() => setMobileSidebarOpen(false)} />
 
-        <main className="flex-1 p-4 md:p-6 lg:p-8 min-w-0 overflow-y-auto">
+        <main className="flex-1 p-3 sm:p-4 md:p-6 lg:p-8 min-w-0 w-full overflow-x-hidden">
           {children || <Outlet />}
         </main>
       </div>

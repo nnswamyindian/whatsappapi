@@ -1,7 +1,25 @@
 import React, { useState } from 'react';
 import { api } from '../../services/api';
 import { WhatsAppBubblePreview } from '../../components/whatsapp/WhatsAppBubblePreview';
-import { X, Sparkles, Plus, Trash2, Send, FileCode2, AlertCircle, Layers, Image as ImageIcon, Download } from 'lucide-react';
+import {
+  X,
+  Sparkles,
+  Plus,
+  Trash2,
+  Send,
+  FileCode2,
+  AlertCircle,
+  Layers,
+  Image as ImageIcon,
+  Download,
+  Upload,
+  Video,
+  FileText,
+  CheckCircle2,
+  Loader2,
+  Globe,
+  Paperclip,
+} from 'lucide-react';
 
 interface TemplateStudioModalProps {
   isOpen: boolean;
@@ -56,6 +74,64 @@ export const TemplateStudioModal: React.FC<TemplateStudioModalProps> = ({
   const [sampleVars, setSampleVars] = useState<string[]>(['Sarah', 'TRACK-9921']);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Media upload state
+  const [headerInputMode, setHeaderInputMode] = useState<'UPLOAD' | 'URL'>('UPLOAD');
+  const [isUploading, setIsUploading] = useState(false);
+  const [uploadedFileMeta, setUploadedFileMeta] = useState<{ name: string; size: number } | null>(null);
+
+  const handleMediaUpload = async (file: File, cardIndex?: number) => {
+    const sizeMB = file.size / (1024 * 1024);
+    const targetType = cardIndex !== undefined ? carouselCards[cardIndex]?.headerType || 'IMAGE' : headerType;
+
+    if (targetType === 'IMAGE' && sizeMB > 5) {
+      setError(`Selected image (${sizeMB.toFixed(1)}MB) exceeds Meta limit of 5MB.`);
+      return;
+    }
+    if (targetType === 'VIDEO' && sizeMB > 16) {
+      setError(`Selected video (${sizeMB.toFixed(1)}MB) exceeds Meta limit of 16MB.`);
+      return;
+    }
+    if (targetType === 'DOCUMENT' && sizeMB > 100) {
+      setError(`Selected document (${sizeMB.toFixed(1)}MB) exceeds Meta limit of 100MB.`);
+      return;
+    }
+
+    setIsUploading(true);
+    setError(null);
+
+    try {
+      const reader = new FileReader();
+      const base64Promise = new Promise<string>((resolve, reject) => {
+        reader.onload = () => resolve(reader.result as string);
+        reader.onerror = () => reject(new Error('Failed to read file'));
+      });
+      reader.readAsDataURL(file);
+      const base64Data = await base64Promise;
+
+      const res = await api.post<any>('/templates/upload-media', {
+        fileName: file.name,
+        fileType: file.type,
+        fileBase64: base64Data,
+        mediaType: targetType,
+      });
+
+      if (res.url) {
+        if (cardIndex !== undefined) {
+          const updated = [...carouselCards];
+          updated[cardIndex].headerUrl = res.url;
+          setCarouselCards(updated);
+        } else {
+          setHeaderContent(res.url);
+          setUploadedFileMeta({ name: file.name, size: file.size });
+        }
+      }
+    } catch (err: any) {
+      setError(err.message || 'Failed to upload media. Please try again or paste a media URL.');
+    } finally {
+      setIsUploading(false);
+    }
+  };
 
   if (!isOpen) return null;
 
@@ -274,14 +350,22 @@ export const TemplateStudioModal: React.FC<TemplateStudioModalProps> = ({
                         <button
                           type="button"
                           key={type}
-                          onClick={() => setHeaderType(type)}
-                          className={`px-2.5 py-1 rounded-lg font-semibold text-[11px] transition-all ${
+                          onClick={() => {
+                            setHeaderType(type);
+                            if (type === 'NONE' || type === 'TEXT') {
+                              setUploadedFileMeta(null);
+                            }
+                          }}
+                          className={`px-2.5 py-1 rounded-lg font-semibold text-[11px] transition-all flex items-center gap-1 ${
                             headerType === type
                               ? 'bg-brand-600 text-white shadow-xs'
                               : 'bg-white border border-slate-200 text-slate-700 hover:bg-slate-50'
                           }`}
                         >
-                          {type}
+                          {type === 'IMAGE' && <ImageIcon className="w-3 h-3" />}
+                          {type === 'VIDEO' && <Video className="w-3 h-3" />}
+                          {type === 'DOCUMENT' && <FileText className="w-3 h-3" />}
+                          <span>{type}</span>
                         </button>
                       ))}
                     </div>
@@ -297,24 +381,132 @@ export const TemplateStudioModal: React.FC<TemplateStudioModalProps> = ({
                       />
                     )}
 
-                    {(headerType === 'IMAGE' || headerType === 'VIDEO') && (
-                      <input
-                        type="url"
-                        placeholder="https://example.com/media.jpg"
-                        value={headerContent}
-                        onChange={(e) => setHeaderContent(e.target.value)}
-                        className="w-full px-3 py-2 rounded-lg border border-slate-300 bg-white font-mono text-[11px]"
-                      />
-                    )}
+                    {['IMAGE', 'VIDEO', 'DOCUMENT'].includes(headerType) && (
+                      <div className="space-y-2.5 pt-1">
+                        {/* Tab Switcher: Upload File vs Paste URL */}
+                        <div className="flex items-center gap-1 bg-slate-200/60 p-0.5 rounded-lg w-fit text-[11px]">
+                          <button
+                            type="button"
+                            onClick={() => setHeaderInputMode('UPLOAD')}
+                            className={`flex items-center gap-1 px-2.5 py-1 rounded-md font-semibold transition-all ${
+                              headerInputMode === 'UPLOAD'
+                                ? 'bg-white text-brand-900 shadow-xs'
+                                : 'text-slate-600 hover:text-slate-900'
+                            }`}
+                          >
+                            <Upload className="w-3 h-3" />
+                            <span>Upload File</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setHeaderInputMode('URL')}
+                            className={`flex items-center gap-1 px-2.5 py-1 rounded-md font-semibold transition-all ${
+                              headerInputMode === 'URL'
+                                ? 'bg-white text-brand-900 shadow-xs'
+                                : 'text-slate-600 hover:text-slate-900'
+                            }`}
+                          >
+                            <Globe className="w-3 h-3" />
+                            <span>Media URL</span>
+                          </button>
+                        </div>
 
-                    {headerType === 'DOCUMENT' && (
-                      <input
-                        type="text"
-                        placeholder="e.g. invoice_march_2025.pdf"
-                        value={headerContent}
-                        onChange={(e) => setHeaderContent(e.target.value)}
-                        className="w-full px-3 py-2 rounded-lg border border-slate-300 bg-white"
-                      />
+                        {/* Upload File Zone */}
+                        {headerInputMode === 'UPLOAD' ? (
+                          headerContent && uploadedFileMeta ? (
+                            <div className="p-3 bg-white border border-emerald-300 rounded-xl flex items-center justify-between shadow-xs">
+                              <div className="flex items-center gap-2.5 min-w-0">
+                                <div className="w-9 h-9 rounded-lg bg-emerald-50 border border-emerald-200 flex items-center justify-center text-emerald-700 shrink-0">
+                                  {headerType === 'IMAGE' && <ImageIcon className="w-4 h-4" />}
+                                  {headerType === 'VIDEO' && <Video className="w-4 h-4" />}
+                                  {headerType === 'DOCUMENT' && <FileText className="w-4 h-4" />}
+                                </div>
+                                <div className="min-w-0">
+                                  <div className="font-bold text-slate-800 text-xs truncate">
+                                    {uploadedFileMeta.name}
+                                  </div>
+                                  <div className="text-[10px] text-emerald-700 flex items-center gap-1">
+                                    <CheckCircle2 className="w-3 h-3" />
+                                    <span>Uploaded ({(uploadedFileMeta.size / 1024).toFixed(0)} KB)</span>
+                                  </div>
+                                </div>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setHeaderContent('');
+                                  setUploadedFileMeta(null);
+                                }}
+                                className="text-slate-400 hover:text-rose-600 p-1 text-xs font-semibold ml-2 shrink-0"
+                              >
+                                Replace
+                              </button>
+                            </div>
+                          ) : (
+                            <label className={`relative border-2 border-dashed rounded-xl p-4 flex flex-col items-center justify-center gap-1.5 cursor-pointer transition-colors ${
+                              isUploading ? 'border-brand-400 bg-brand-50/50' : 'border-slate-300 hover:border-brand-500 hover:bg-slate-100/50 bg-white'
+                            }`}>
+                              <input
+                                type="file"
+                                className="hidden"
+                                disabled={isUploading}
+                                accept={
+                                  headerType === 'IMAGE'
+                                    ? 'image/jpeg,image/png,image/webp'
+                                    : headerType === 'VIDEO'
+                                    ? 'video/mp4,video/3gpp'
+                                    : '.pdf,.doc,.docx,.xlsx,.txt'
+                                }
+                                onChange={(e) => {
+                                  if (e.target.files && e.target.files[0]) {
+                                    handleMediaUpload(e.target.files[0]);
+                                  }
+                                }}
+                              />
+                              {isUploading ? (
+                                <div className="flex items-center gap-2 text-brand-700 py-2">
+                                  <Loader2 className="w-4 h-4 animate-spin" />
+                                  <span className="font-semibold text-xs">Uploading media to server...</span>
+                                </div>
+                              ) : (
+                                <>
+                                  <div className="w-8 h-8 rounded-full bg-brand-50 text-brand-600 flex items-center justify-center">
+                                    <Upload className="w-4 h-4" />
+                                  </div>
+                                  <div className="text-center">
+                                    <span className="font-bold text-brand-700 text-xs">Click to upload {headerType.toLowerCase()}</span>
+                                    <span className="text-slate-500 text-xs"> or drag & drop</span>
+                                    <p className="text-[10px] text-slate-400 mt-0.5">
+                                      {headerType === 'IMAGE' && 'PNG, JPG, or WebP (max 5MB)'}
+                                      {headerType === 'VIDEO' && 'MP4 or 3GP (max 16MB)'}
+                                      {headerType === 'DOCUMENT' && 'PDF, DOCX, XLSX (max 100MB)'}
+                                    </p>
+                                  </div>
+                                </>
+                              )}
+                            </label>
+                          )
+                        ) : (
+                          <div className="space-y-1">
+                            <input
+                              type="url"
+                              placeholder={
+                                headerType === 'IMAGE'
+                                  ? 'https://example.com/banner.jpg'
+                                  : headerType === 'VIDEO'
+                                  ? 'https://example.com/demo.mp4'
+                                  : 'https://example.com/invoice.pdf'
+                              }
+                              value={headerContent}
+                              onChange={(e) => setHeaderContent(e.target.value)}
+                              className="w-full px-3 py-2 rounded-lg border border-slate-300 bg-white font-mono text-[11px]"
+                            />
+                            <p className="text-[10px] text-slate-400">
+                              Must be a publicly accessible HTTPS link to sample {headerType.toLowerCase()} for Meta review.
+                            </p>
+                          </div>
+                        )}
+                      </div>
                     )}
                   </div>
                 )}
@@ -460,10 +652,26 @@ export const TemplateStudioModal: React.FC<TemplateStudioModalProps> = ({
                       </div>
 
                       <div>
-                        <label className="block text-[11px] font-semibold text-slate-600 mb-1">Card Image URL</label>
+                        <div className="flex items-center justify-between mb-1">
+                          <label className="block text-[11px] font-semibold text-slate-600">Card Header Media</label>
+                          <label className="text-[10px] text-brand-700 hover:text-brand-900 cursor-pointer font-bold flex items-center gap-1 bg-brand-50 hover:bg-brand-100 px-2 py-0.5 rounded border border-brand-200 transition-colors">
+                            <Upload className="w-3 h-3" />
+                            <span>Upload Media</span>
+                            <input
+                              type="file"
+                              className="hidden"
+                              accept="image/jpeg,image/png,image/webp,video/mp4"
+                              onChange={(e) => {
+                                if (e.target.files && e.target.files[0]) {
+                                  handleMediaUpload(e.target.files[0], idx);
+                                }
+                              }}
+                            />
+                          </label>
+                        </div>
                         <input
                           type="url"
-                          placeholder="https://images.unsplash.com/..."
+                          placeholder="https://images.unsplash.com/... or click Upload Media above"
                           value={card.headerUrl}
                           onChange={(e) => {
                             const updated = [...carouselCards];

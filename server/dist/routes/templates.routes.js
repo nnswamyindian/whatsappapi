@@ -4,6 +4,8 @@ import { authMiddleware } from '../middleware/auth.js';
 import { requireRole } from '../middleware/rbac.js';
 import { getWhatsAppProviderForOrg } from '../providers/whatsapp/factory.js';
 import { v4 as uuidv4 } from 'uuid';
+import path from 'node:path';
+import fs from 'node:fs';
 const router = Router();
 router.use(authMiddleware);
 // List Templates
@@ -222,6 +224,50 @@ router.post('/', requireRole(['campaign_manager']), async (req, res) => {
         status,
         isCarousel,
         metaTemplateId,
+    });
+});
+// Upload Media (Image, Video, Document) for Template Headers
+router.post('/upload-media', requireRole(['campaign_manager']), async (req, res) => {
+    const { fileName, fileType, fileBase64, mediaType } = req.body;
+    if (!fileName || !fileBase64) {
+        res.status(400).json({ error: 'File name and file content (base64) are required' });
+        return;
+    }
+    // Strip possible data URI prefix (e.g., "data:image/png;base64,")
+    const base64Data = fileBase64.replace(/^data:[^;]+;base64,/, '');
+    const buffer = Buffer.from(base64Data, 'base64');
+    // File size validation according to WhatsApp Cloud API limits:
+    // Images: Max 5MB, Videos: Max 16MB, Documents: Max 100MB
+    const sizeMB = buffer.length / (1024 * 1024);
+    if (mediaType === 'IMAGE' && sizeMB > 5) {
+        res.status(400).json({ error: `Image file exceeds Meta limit of 5MB (current: ${sizeMB.toFixed(2)}MB)` });
+        return;
+    }
+    if (mediaType === 'VIDEO' && sizeMB > 16) {
+        res.status(400).json({ error: `Video file exceeds Meta limit of 16MB (current: ${sizeMB.toFixed(2)}MB)` });
+        return;
+    }
+    if (mediaType === 'DOCUMENT' && sizeMB > 100) {
+        res.status(400).json({ error: `Document file exceeds Meta limit of 100MB (current: ${sizeMB.toFixed(2)}MB)` });
+        return;
+    }
+    const cleanName = fileName.replace(/[^a-zA-Z0-9._-]/g, '_');
+    const uniqueName = `tpl_${Date.now()}_${uuidv4().substring(0, 8)}_${cleanName}`;
+    const targetDir = path.resolve(process.cwd(), 'uploads', 'templates');
+    if (!fs.existsSync(targetDir)) {
+        fs.mkdirSync(targetDir, { recursive: true });
+    }
+    const filePath = path.join(targetDir, uniqueName);
+    fs.writeFileSync(filePath, buffer);
+    const appUrl = process.env.APP_URL || 'http://localhost:5000';
+    const publicUrl = `${appUrl}/uploads/templates/${uniqueName}`;
+    res.status(201).json({
+        success: true,
+        url: publicUrl,
+        fileName: cleanName,
+        fileSize: buffer.length,
+        fileType: fileType || 'application/octet-stream',
+        mediaType: mediaType || 'IMAGE',
     });
 });
 // Delete Template

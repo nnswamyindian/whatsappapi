@@ -1,0 +1,32 @@
+# Node dependencies
+node_modules/
+client/node_modules/
+server/node_modules/
+
+# Environment files
+.env
+.env.local
+.env.development
+.env.production
+server/.env
+
+# Local Database & WAL files
+server/data/*.db
+server/data/*.db-wal
+server/data/*.db-shm
+*.sqlite
+*.sqlite3
+
+# Uploads directory
+uploads/
+server/uploads/
+
+# Build caches & logs
+*.log
+npm-debug.log*
+.vite/
+.cache/
+
+# OS files
+.DS_Store
+Thumbs.db

@@ -35,8 +35,14 @@ app.use(cors({
     origin: true, // Allow frontend dev server
     credentials: true,
 }));
-app.use(express.json({ limit: '10mb' }));
-app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ extended: true, limit: '50mb' }));
+// Static Media Uploads Serving (Images, Videos, Documents for WhatsApp Templates)
+const UPLOADS_DIR = path.resolve(process.cwd(), 'uploads');
+if (!fs.existsSync(UPLOADS_DIR)) {
+    fs.mkdirSync(UPLOADS_DIR, { recursive: true });
+}
+app.use('/uploads', express.static(UPLOADS_DIR));
 // Health Check
 app.get('/api/v1/health', async (req, res) => {
     const dbHealth = await db.getHealth();
