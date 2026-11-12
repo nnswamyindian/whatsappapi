@@ -71,7 +71,7 @@ export const ApplicationStatusPage: React.FC = () => {
           Application Status
         </h1>
         <p className="text-xs text-slate-500">
-          GreenWave Compliance & Business Onboarding Portal
+          MetaGreenWave Compliance & Business Onboarding Portal
         </p>
       </div>
 
@@ -126,7 +126,7 @@ export const ApplicationStatusPage: React.FC = () => {
                   <Clock className="w-4 h-4 text-amber-600" /> Application Under Review
                 </h3>
                 <p className="text-xs text-amber-800 leading-relaxed">
-                  Thank you for registering with GreenWave. Your application is currently being evaluated by our platform administration team to ensure carrier messaging compliance. You will receive an automated email as soon as your workspace is approved.
+                  Thank you for registering with MetaGreenWave. Your application is currently being evaluated by our platform administration team to ensure carrier messaging compliance. You will receive an automated email as soon as your workspace is approved.
                 </p>
               </div>
 
@@ -218,7 +218,7 @@ export const ApplicationStatusPage: React.FC = () => {
                   {application?.rejection_reason || 'Does not meet carrier business messaging guidelines.'}
                 </div>
                 <p className="text-[11px] text-rose-700 pt-1">
-                  If you believe this decision was made in error or wish to appeal, please contact support@greenwave.io.
+                  If you believe this decision was made in error or wish to appeal, please contact support@metagreenwave.io.
                 </p>
               </div>
             </div>

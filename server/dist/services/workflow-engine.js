@@ -26,7 +26,7 @@ export class WorkflowEngine {
             return;
         }
         // 4. Check for keyword-triggered published active chatbots
-        const matchingBot = db.queryOne("SELECT * FROM chatbots WHERE organization_id = ? AND is_active = 1 AND trigger_keyword != '' AND ? LIKE '%' || trigger_keyword || '%'", [orgId, cleanText]);
+        const matchingBot = db.queryOne("SELECT * FROM chatbots WHERE organization_id = ? AND is_active = 1 AND trigger_keyword != '' AND ? LIKE CONCAT('%', trigger_keyword, '%')", [orgId, cleanText]);
         if (matchingBot) {
             await this.startChatbotSession(matchingBot, conversationId, contactId, phoneE164);
         }

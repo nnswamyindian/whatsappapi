@@ -3,6 +3,8 @@ import path from 'node:path';
 import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { SCHEMA_SQL } from './schema.js';
+import { mySqlEngine } from './mysql-pool.js';
+import { ENV } from '../config/env.js';
 import bcrypt from 'bcryptjs';
 import { v4 as uuidv4 } from 'uuid';
 import { seedSubscriptionPlans, seedEmailTemplates } from './seeds.js';
@@ -188,8 +190,51 @@ try {
     dbInstance.exec(`ALTER TABLE users ADD COLUMN reset_password_expires_at TEXT;`);
 }
 catch (e) { }
+try {
+    dbInstance.exec(`
+    CREATE TABLE IF NOT EXISTS lifecycle_dispatches (
+      id TEXT PRIMARY KEY,
+      organization_id TEXT NOT NULL,
+      recipient_phone TEXT,
+      recipient_email TEXT,
+      channel TEXT NOT NULL,
+      event_type TEXT NOT NULL,
+      title TEXT NOT NULL,
+      message_preview TEXT NOT NULL,
+      metadata_json TEXT DEFAULT '{}',
+      status TEXT NOT NULL DEFAULT 'delivered',
+      dispatched_at TEXT NOT NULL
+    );
+  `);
+}
+catch (e) { }
 export const db = {
     raw: dbInstance,
+    mysql: mySqlEngine,
+    isMySQL() {
+        return mySqlEngine.isConnected();
+    },
+    async getHealth() {
+        if (mySqlEngine.isConnected()) {
+            const mysqlHealth = await mySqlEngine.healthCheck();
+            return {
+                engine: 'mysql',
+                connected: mysqlHealth.connected,
+                latencyMs: mysqlHealth.latencyMs,
+                details: mysqlHealth,
+            };
+        }
+        return {
+            engine: 'sqlite',
+            connected: true,
+            latencyMs: 0,
+            details: {
+                mode: 'WAL',
+                dbFile: DB_PATH,
+                foreignKeys: true,
+            },
+        };
+    },
     query(sql, params = []) {
         const sanitized = params.map(p => (p === undefined ? null : p));
         const stmt = dbInstance.prepare(sql);
@@ -220,7 +265,55 @@ export const db = {
             throw err;
         }
     },
+    // Asynchronous Methods (Running against MySQL Pool when active, or SQLite)
+    async queryAsync(sql, params = []) {
+        if (mySqlEngine.isConnected()) {
+            return mySqlEngine.query(sql, params);
+        }
+        return this.query(sql, params);
+    },
+    async queryOneAsync(sql, params = []) {
+        if (mySqlEngine.isConnected()) {
+            return mySqlEngine.queryOne(sql, params);
+        }
+        return this.queryOne(sql, params);
+    },
+    async executeAsync(sql, params = []) {
+        if (mySqlEngine.isConnected()) {
+            return mySqlEngine.execute(sql, params);
+        }
+        const res = this.execute(sql, params);
+        return {
+            changes: Number(res.changes),
+            lastInsertRowid: Number(res.lastInsertRowid || 0),
+        };
+    },
+    async transactionAsync(fn) {
+        if (mySqlEngine.isConnected()) {
+            return mySqlEngine.withTransaction(fn);
+        }
+        return this.transaction(() => fn());
+    },
 };
+/**
+ * Asynchronously initialize database connections (MySQL if configured)
+ */
+export async function initDatabaseConnections() {
+    const shouldConnectMySQL = ENV.DB_TYPE === 'mysql' || Boolean(ENV.DATABASE_URL);
+    if (shouldConnectMySQL) {
+        const connected = await mySqlEngine.initialize();
+        if (connected) {
+            console.log(`✅ [Database Engine] Enterprise MySQL connection pool active (${ENV.DB_NAME || 'database'}).`);
+        }
+        else {
+            console.warn('ℹ️ [Database Engine] MySQL not reachable on startup. Running on high-performance SQLite WAL mode.');
+            console.warn('👉 To connect MySQL: Ensure MySQL is running on port 3306 or run: docker compose up -d');
+        }
+    }
+    else {
+        console.log('ℹ️ [Database Engine] SQLite WAL mode active. To switch to MySQL, set DB_TYPE=mysql or DATABASE_URL in .env');
+    }
+}
 // Seed initial system data (Rate cards, default platform admin, demo workspace)
 export function seedDatabase() {
     seedSubscriptionPlans();

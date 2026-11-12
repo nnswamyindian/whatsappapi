@@ -77,7 +77,7 @@ export const FeaturesPage: React.FC = () => {
       title: 'Transactional API & Cryptographic OTP',
       tagline: 'Mission-critical messaging for developers and backends.',
       description:
-        'Integrate your existing e-commerce, ERP, or CRM platforms with GreenWave using scoped API keys. Generate and verify single-use cryptographic 6-digit WhatsApp OTPs with strict rate limits and 5-minute auto-expiry.',
+        'Integrate your existing e-commerce, ERP, or CRM platforms with MetaGreenWave using scoped API keys. Generate and verify single-use cryptographic 6-digit WhatsApp OTPs with strict rate limits and 5-minute auto-expiry.',
       bullets: [
         'Scoped API keys (gw_live_...) with granular permissions',
         'Cryptographic SHA-256 hashed OTP storage',
@@ -99,7 +99,7 @@ export const FeaturesPage: React.FC = () => {
           Everything You Need to Scale on WhatsApp
         </h1>
         <p className="text-base sm:text-lg text-slate-600 leading-relaxed">
-          From marketing campaigns to customer support and automated lead qualification, GreenWave provides an all-in-one software stack built on official Meta infrastructure.
+          From marketing campaigns to customer support and automated lead qualification, MetaGreenWave provides an all-in-one software stack built on official Meta infrastructure.
         </p>
       </div>
 

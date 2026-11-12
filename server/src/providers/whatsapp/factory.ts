@@ -41,3 +41,10 @@ export function getWhatsAppProviderForOrg(orgId: string): { provider: IWhatsAppP
     isSandbox: true,
   };
 }
+
+export function getWhatsAppProvider(orgId?: string): IWhatsAppProvider {
+  if (orgId) {
+    return getWhatsAppProviderForOrg(orgId).provider;
+  }
+  return new MockWhatsAppProvider();
+}

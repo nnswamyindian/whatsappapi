@@ -671,4 +671,22 @@ CREATE TABLE IF NOT EXISTS onboarding_checklists (
   FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE,
   UNIQUE(organization_id, step_key)
 );
+
+-- Client Lifecycle Omnichannel Automations & Audit Trail (WhatsApp + Email)
+CREATE TABLE IF NOT EXISTS lifecycle_dispatches (
+  id TEXT PRIMARY KEY,
+  organization_id TEXT NOT NULL,
+  recipient_phone TEXT,
+  recipient_email TEXT,
+  channel TEXT NOT NULL, -- 'whatsapp', 'email', 'both'
+  event_type TEXT NOT NULL, -- 'onboarding_reminder', 'payment_captured', 'marketing_guide', 'festival_wishes', 'renewal_reminder', 'winback_offer'
+  title TEXT NOT NULL,
+  message_preview TEXT NOT NULL,
+  metadata_json TEXT DEFAULT '{}',
+  status TEXT NOT NULL DEFAULT 'delivered',
+  dispatched_at TEXT NOT NULL,
+  FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_lifecycle_org ON lifecycle_dispatches(organization_id, event_type);
 `;

@@ -36,4 +36,16 @@ export const ENV = {
   CORS_ORIGIN: process.env.CORS_ORIGIN || '*',
   ENABLE_DEMO_MODE: process.env.ENABLE_DEMO_MODE !== 'false',
   IS_SANDBOX: !process.env.META_ACCESS_TOKEN,
+
+  // Relational Database Configuration (MySQL / Cloud / Local)
+  DB_TYPE: (process.env.DB_TYPE || (process.env.DATABASE_URL ? 'mysql' : 'sqlite')) as 'mysql' | 'sqlite',
+  DATABASE_URL: process.env.DATABASE_URL || '',
+  DB_HOST: process.env.DB_HOST || 'localhost',
+  DB_PORT: parseInt(process.env.DB_PORT || '3306', 10),
+  DB_USER: process.env.DB_USER || 'greenwave',
+  DB_PASSWORD: process.env.DB_PASSWORD || 'GreenWave#2025',
+  DB_NAME: process.env.DB_NAME || 'greenwave_db',
+  DB_SSL: process.env.DB_SSL === 'true',
+  DB_POOL_MIN: parseInt(process.env.DB_POOL_MIN || '2', 10),
+  DB_POOL_MAX: parseInt(process.env.DB_POOL_MAX || '20', 10),
 };

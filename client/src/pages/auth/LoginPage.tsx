@@ -39,8 +39,8 @@ export const LoginPage: React.FC = () => {
             <MessageSquare className="w-6 h-6" />
           </div>
         </Link>
-        <h1 className="text-2xl font-bold tracking-tight text-slate-900">Sign in to GreenWave</h1>
-        <p className="text-xs text-slate-500 mt-1">Official WhatsApp Business Messaging Platform</p>
+        <h1 className="text-2xl font-bold tracking-tight text-slate-900">Sign in to MetaGreenWave</h1>
+        <p className="text-xs text-slate-500 mt-1">Official Meta WhatsApp Business Cloud Platform</p>
       </div>
 
       <div className="mt-6 sm:mx-auto sm:w-full sm:max-w-md">

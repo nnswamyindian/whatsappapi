@@ -8,13 +8,13 @@ export const AboutPage: React.FC = () => {
       {/* Hero */}
       <div className="text-center space-y-4 max-w-3xl mx-auto">
         <span className="text-xs font-bold uppercase tracking-wider text-brand-700 bg-brand-50 px-3 py-1 rounded-full border border-brand-200">
-          About GreenWave
+          About MetaGreenWave
         </span>
         <h1 className="text-4xl sm:text-5xl font-extrabold text-slate-900 tracking-tight">
           Engineered for Trust, Performance, and Compliance
         </h1>
         <p className="text-base sm:text-lg text-slate-600 leading-relaxed">
-          GreenWave is an enterprise-grade software platform built to enable legitimate businesses to communicate reliably and respectfully with their customers over WhatsApp.
+          MetaGreenWave is an enterprise-grade software platform built to enable legitimate businesses to communicate reliably and respectfully with their customers over WhatsApp.
         </p>
       </div>
 
@@ -36,7 +36,7 @@ export const AboutPage: React.FC = () => {
           </div>
           <h3 className="text-xl font-bold text-slate-900">Official Infrastructure Only</h3>
           <p className="text-xs sm:text-sm text-slate-600 leading-relaxed">
-            GreenWave integrates solely through official Meta WhatsApp Cloud API endpoints (v21.0) and Meta Embedded Signup. We never use unofficial browser automations, reverse-engineered protocols, or unauthorized gateways.
+            MetaGreenWave integrates solely through official Meta WhatsApp Cloud API endpoints (v21.0) and Meta Embedded Signup. We never use unofficial browser automations, reverse-engineered protocols, or unauthorized gateways.
           </p>
         </div>
 

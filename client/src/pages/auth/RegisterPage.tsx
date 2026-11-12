@@ -98,7 +98,7 @@ export const RegisterPage: React.FC = () => {
           <div className="w-11 h-11 rounded-2xl bg-gradient-to-tr from-brand-900 to-brand-600 flex items-center justify-center text-white shadow-md shadow-brand-600/20 group-hover:scale-105 transition-transform">
             <MessageSquare className="w-6 h-6" />
           </div>
-          <span className="font-extrabold text-2xl text-slate-900 tracking-tight">GreenWave</span>
+          <span className="font-extrabold text-2xl text-slate-900 tracking-tight">MetaGreenWave</span>
         </Link>
         <h1 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight">
           Register Your Business

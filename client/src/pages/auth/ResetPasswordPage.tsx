@@ -54,7 +54,7 @@ export const ResetPasswordPage: React.FC = () => {
           </div>
         </Link>
         <h1 className="text-2xl font-black text-slate-900">Set New Password</h1>
-        <p className="text-xs text-slate-500">Choose a secure password for your GreenWave account.</p>
+        <p className="text-xs text-slate-500">Choose a secure password for your MetaGreenWave account.</p>
       </div>
 
       <div className="mt-6 sm:mx-auto sm:w-full sm:max-w-md">

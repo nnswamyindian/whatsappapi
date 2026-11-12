@@ -1,0 +1,218 @@
+name: MetaGreenWave Continuous Integration (CI)
+
+on:
+  push:
+    branches: [ main, master, develop, staging ]
+  pull_request:
+    branches: [ main, master, develop, staging ]
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ============================================================================
+  # 1. Linting & Static Type Checking
+  # ============================================================================
+  lint-and-typecheck:
+    name: Typecheck & Code Integrity
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        node-version: [ 20.x, 22.x ]
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: 'npm'
+
+      - name: Install Root Dependencies
+        run: npm ci || npm install
+
+      - name: Install Client Dependencies
+        run: cd client && (npm ci || npm install)
+
+      - name: Install Server Dependencies
+        run: cd server && (npm ci || npm install)
+
+      - name: Client TypeScript Check (tsc --noEmit)
+        run: cd client && npx tsc --noEmit
+
+      - name: Server TypeScript Check (tsc --noEmit)
+        run: cd server && npx tsc --noEmit
+
+  # ============================================================================
+  # 2. Production Build Verification
+  # ============================================================================
+  build:
+    name: Build Client & Server Bundles
+    needs: [ lint-and-typecheck ]
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 20.x
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20.x
+          cache: 'npm'
+
+      - name: Install Dependencies
+        run: |
+          npm ci || npm install
+          cd client && (npm ci || npm install)
+          cd ../server && (npm ci || npm install)
+
+      - name: Build Vite Frontend Bundle
+        run: cd client && npm run build
+
+      - name: Build Server Distribution
+        run: cd server && npm run build
+
+      - name: Archive Client Dist Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: client-dist
+          path: client/dist/
+          retention-days: 7
+
+      - name: Archive Server Dist Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: server-dist
+          path: server/dist/
+          retention-days: 7
+
+  # ============================================================================
+  # 3. Automated Core Backend Tests (22 Test Suites)
+  # ============================================================================
+  test-unit-integration:
+    name: Core Test Suites (22 Suites)
+    needs: [ build ]
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 20.x
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20.x
+          cache: 'npm'
+
+      - name: Install Dependencies
+        run: |
+          npm ci || npm install
+          cd server && (npm ci || npm install)
+
+      - name: Download Server Build Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: server-dist
+          path: server/dist
+
+      - name: Execute Node.js Core Backend Test Suite
+        env:
+          NODE_ENV: test
+          JWT_SECRET: ci_test_jwt_secret_key_minimum_32_characters_long_12345
+          ENCRYPTION_KEY: 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+          PORT: 5000
+        run: |
+          cd server
+          npm test
+
+  # ============================================================================
+  # 4. Enterprise End-to-End Acceptance Tests
+  # ============================================================================
+  test-enterprise-e2e:
+    name: Enterprise E2E Acceptance Flow
+    needs: [ build ]
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 20.x
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20.x
+          cache: 'npm'
+
+      - name: Install Dependencies
+        run: |
+          npm ci || npm install
+          cd client && (npm ci || npm install)
+          cd ../server && (npm ci || npm install)
+
+      - name: Download Build Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: client-dist
+          path: client/dist
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: server-dist
+          path: server/dist
+
+      - name: Start MetaGreenWave Backend Server Daemon
+        env:
+          NODE_ENV: test
+          PORT: 5000
+          JWT_SECRET: ci_test_jwt_secret_key_minimum_32_characters_long_12345
+          ENCRYPTION_KEY: 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+        run: |
+          cd server
+          node dist/index.js &
+          echo $! > ../server.pid
+          sleep 4
+
+      - name: Health Check Probe
+        run: |
+          curl -f http://localhost:5000/api/v1/health || (echo "Health check failed!" && exit 1)
+
+      - name: Execute Enterprise E2E Verification Suite
+        run: |
+          node server/tests/enterprise-e2e.cjs
+
+      - name: Stop Background Server
+        if: always()
+        run: |
+          if [ -f server.pid ]; then
+            kill $(cat server.pid) || true
+          fi
+
+  # ============================================================================
+  # 5. Security & Dependency Vulnerability Scan
+  # ============================================================================
+  security-audit:
+    name: Dependency Security Scan
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 20.x
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20.x
+
+      - name: Audit Root Dependencies
+        run: npm audit --audit-level=high || true
+
+      - name: Audit Server Dependencies
+        run: cd server && npm audit --audit-level=high || true
+
+      - name: Audit Client Dependencies
+        run: cd client && npm audit --audit-level=high || true
+

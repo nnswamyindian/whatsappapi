@@ -25,3 +25,9 @@ export function getWhatsAppProviderForOrg(orgId) {
         isSandbox: true,
     };
 }
+export function getWhatsAppProvider(orgId) {
+    if (orgId) {
+        return getWhatsAppProviderForOrg(orgId).provider;
+    }
+    return new MockWhatsAppProvider();
+}

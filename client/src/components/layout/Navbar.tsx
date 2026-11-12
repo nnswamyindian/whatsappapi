@@ -64,10 +64,12 @@ export const Navbar: React.FC<NavbarProps> = ({ onMobileMenuToggle, onOpenTopupM
           </div>
           <div>
             <div className="flex items-center gap-1.5">
-              <span className="font-bold text-lg text-slate-900 tracking-tight leading-none">GreenWave</span>
-              <ShieldCheck className="w-4 h-4 text-brand-600" />
+              <span className="font-extrabold text-lg text-slate-900 tracking-tight leading-none">MetaGreenWave</span>
+              <span className="bg-brand-50 text-brand-700 text-[9px] font-extrabold px-1.5 py-0.5 rounded border border-brand-200">
+                Official API
+              </span>
             </div>
-            <span className="text-[10px] text-slate-500 font-medium hidden sm:block">WhatsApp Business SaaS</span>
+            <span className="text-[10px] text-slate-500 font-medium hidden sm:block">Enterprise WhatsApp SaaS</span>
           </div>
         </Link>
 

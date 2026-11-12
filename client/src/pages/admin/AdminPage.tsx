@@ -11,15 +11,19 @@ import {
   CreditCard,
   History,
   Activity,
+  DollarSign,
+  Zap,
 } from 'lucide-react';
 import { CustomerApplicationsPage } from './CustomerApplicationsPage';
 import { TenantManagementPage } from './TenantManagementPage';
 import { EmailManagementPage } from './EmailManagementPage';
 import { SubscriptionPlansPage } from './SubscriptionPlansPage';
 import { AuditLogsPage } from './AuditLogsPage';
+import { ClientSubscriptionsPage } from './ClientSubscriptionsPage';
+import { LifecycleHubPage } from './LifecycleHubPage';
 
 export const AdminPage: React.FC = () => {
-  const [activeTab, setActiveTab] = useState<'overview' | 'applications' | 'tenants' | 'email' | 'plans' | 'audit'>('applications');
+  const [activeTab, setActiveTab] = useState<'overview' | 'applications' | 'tenants' | 'subscriptions' | 'lifecycle' | 'email' | 'plans' | 'audit'>('applications');
   const [overview, setOverview] = useState<any>(null);
   const [loading, setLoading] = useState(true);
 
@@ -37,10 +41,10 @@ export const AdminPage: React.FC = () => {
         <div>
           <div className="flex items-center gap-2">
             <ShieldAlert className="w-6 h-6 text-brand-400" />
-            <h1 className="text-xl sm:text-2xl font-black tracking-tight">GreenWave Super Admin Portal</h1>
+            <h1 className="text-xl sm:text-2xl font-black tracking-tight">MetaGreenWave Operations Control Center</h1>
           </div>
           <p className="text-xs text-slate-400 mt-1">
-            Global governance, customer onboarding approvals, tenant quotas, and email template dispatch.
+            Global governance, customer onboarding approvals, tenant quotas, MRR tracking, and omnichannel WhatsApp lifecycle follow-ups.
           </p>
         </div>
 
@@ -85,6 +89,30 @@ export const AdminPage: React.FC = () => {
         >
           <Building2 className="w-4 h-4 text-brand-700" />
           <span>Tenants & Quotas</span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab('subscriptions')}
+          className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl transition-all ${
+            activeTab === 'subscriptions'
+              ? 'bg-white text-brand-900 shadow-sm'
+              : 'text-slate-600 hover:text-slate-900'
+          }`}
+        >
+          <DollarSign className="w-4 h-4 text-brand-700" />
+          <span>Subscriptions & MRR</span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab('lifecycle')}
+          className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl transition-all ${
+            activeTab === 'lifecycle'
+              ? 'bg-white text-brand-900 shadow-sm'
+              : 'text-slate-600 hover:text-slate-900'
+          }`}
+        >
+          <Zap className="w-4 h-4 text-brand-700" />
+          <span>Lifecycle & WhatsApp Nurture</span>
         </button>
 
         <button
@@ -139,6 +167,8 @@ export const AdminPage: React.FC = () => {
       {/* Tab Panels */}
       {activeTab === 'applications' && <CustomerApplicationsPage />}
       {activeTab === 'tenants' && <TenantManagementPage />}
+      {activeTab === 'subscriptions' && <ClientSubscriptionsPage />}
+      {activeTab === 'lifecycle' && <LifecycleHubPage />}
       {activeTab === 'email' && <EmailManagementPage />}
       {activeTab === 'plans' && <SubscriptionPlansPage />}
       {activeTab === 'audit' && <AuditLogsPage />}

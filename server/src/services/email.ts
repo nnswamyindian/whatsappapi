@@ -127,5 +127,53 @@ export class EmailService {
       return { success: false, logId, error: err.message };
     }
   }
+
+  /**
+   * Dispatch a custom raw email (e.g. for lifecycle playbooks or ad-hoc notices)
+   */
+  static async sendRaw(options: {
+    to: string;
+    subject: string;
+    html: string;
+    text?: string;
+    metadata?: Record<string, any>;
+  }): Promise<{ success: boolean; logId: string; error?: string }> {
+    const { to, subject, html, text, metadata = {} } = options;
+    const now = new Date().toISOString();
+    const logId = uuidv4();
+
+    try {
+      console.log(`[Email Engine] [Lifecycle Raw] Dispatched to ${to}: "${subject}"`);
+      db.execute(
+        `INSERT INTO email_logs (id, recipient, template_slug, subject, status, metadata_json, created_at)
+         VALUES (?, ?, ?, ?, 'sent', ?, ?)`,
+        [
+          logId,
+          to.toLowerCase().trim(),
+          'raw_custom_lifecycle',
+          subject,
+          JSON.stringify({ ...metadata, text_preview: text?.substring(0, 200) }),
+          now,
+        ]
+      );
+      return { success: true, logId };
+    } catch (err: any) {
+      console.error(`[Email Engine Error] Failed to send raw email to ${to}:`, err);
+      db.execute(
+        `INSERT INTO email_logs (id, recipient, template_slug, subject, status, error_message, metadata_json, created_at)
+         VALUES (?, ?, ?, ?, 'failed', ?, ?, ?)`,
+        [
+          logId,
+          to.toLowerCase().trim(),
+          'raw_custom_lifecycle',
+          subject,
+          err.message,
+          JSON.stringify(metadata),
+          now,
+        ]
+      );
+      return { success: false, logId, error: err.message };
+    }
+  }
 }
 

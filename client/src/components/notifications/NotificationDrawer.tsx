@@ -176,7 +176,7 @@ export const NotificationDrawer: React.FC<NotificationDrawerProps> = ({
 
           {/* Footer Notice */}
           <div className="p-3 bg-slate-50 border-t border-slate-100 text-center text-[10px] text-slate-400">
-            Powered by GreenWave Event Broker &bull; Instant SSE Streaming
+            Powered by MetaGreenWave Event Broker &bull; Instant SSE Streaming
           </div>
         </div>
       </div>

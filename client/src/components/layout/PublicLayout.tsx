@@ -39,12 +39,12 @@ export const PublicLayout: React.FC<{ children?: React.ReactNode }> = ({ childre
             </div>
             <div>
               <div className="flex items-center gap-1.5">
-                <span className="font-extrabold text-xl text-slate-900 tracking-tight">GreenWave</span>
+                <span className="font-extrabold text-xl text-slate-900 tracking-tight">MetaGreenWave</span>
                 <span className="text-[10px] font-bold uppercase tracking-wider bg-brand-50 text-brand-700 px-1.5 py-0.5 rounded border border-brand-200">
-                  Cloud API
+                  Cloud API v21.0
                 </span>
               </div>
-              <p className="text-[11px] text-slate-500 font-medium -mt-0.5">WhatsApp Business SaaS</p>
+              <p className="text-[11px] text-slate-500 font-medium -mt-0.5">Enterprise WhatsApp Business Platform</p>
             </div>
           </Link>
 
@@ -142,7 +142,7 @@ export const PublicLayout: React.FC<{ children?: React.ReactNode }> = ({ childre
                 <div className="w-9 h-9 rounded-xl bg-brand-600 flex items-center justify-center text-white font-bold">
                   <MessageSquare className="w-5 h-5" />
                 </div>
-                <span className="text-xl font-extrabold text-white tracking-tight">GreenWave</span>
+                <span className="text-xl font-extrabold text-white tracking-tight">MetaGreenWave</span>
               </div>
               <p className="text-slate-400 text-xs leading-relaxed max-w-sm">
                 Production-oriented WhatsApp Business Messaging SaaS platform. Engineered for campaign orchestration, shared team inboxes, no-code chatbots, and CRM sales pipelines.
@@ -195,7 +195,7 @@ export const PublicLayout: React.FC<{ children?: React.ReactNode }> = ({ childre
           {/* Compliance & Trademark Disclaimer */}
           <div className="mt-12 pt-8 border-t border-slate-900 text-center md:text-left flex flex-col md:flex-row items-center justify-between gap-4 text-xs text-slate-500">
             <p>
-              &copy; {new Date().getFullYear()} GreenWave Technologies. All rights reserved. GreenWave is an independent software application that integrates with the official Meta WhatsApp Cloud API. WhatsApp is a registered trademark of Meta Platforms, Inc.
+              &copy; {new Date().getFullYear()} MetaGreenWave Technologies Inc. All rights reserved. MetaGreenWave is an enterprise software platform that integrates with the official Meta WhatsApp Cloud API. WhatsApp is a registered trademark of Meta Platforms, Inc.
             </p>
             <div className="flex items-center gap-4 text-slate-400">
               <span className="inline-flex items-center gap-1.5">

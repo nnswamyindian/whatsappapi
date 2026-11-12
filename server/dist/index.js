@@ -4,8 +4,10 @@ import path from 'node:path';
 import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { ENV } from './config/env.js';
-import { seedDatabase } from './db/index.js';
+import { db, seedDatabase, initDatabaseConnections } from './db/index.js';
+import { mySqlEngine } from './db/mysql-pool.js';
 import { sseManager } from './services/sse.js';
+import { ClientLifecycleService } from './services/client-lifecycle.js';
 import jwt from 'jsonwebtoken';
 // Route modules
 import authRoutes from './routes/auth.routes.js';
@@ -36,12 +38,14 @@ app.use(cors({
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 // Health Check
-app.get('/api/v1/health', (req, res) => {
+app.get('/api/v1/health', async (req, res) => {
+    const dbHealth = await db.getHealth();
     res.json({
         status: 'ok',
         service: 'GreenWave WhatsApp Business API Engine',
         version: '1.0.0',
         metaApiVersion: ENV.META_API_VERSION,
+        database: dbHealth,
         timestamp: new Date().toISOString(),
     });
 });
@@ -139,13 +143,35 @@ app.use((err, req, res, next) => {
 // Initialize database and start listening
 try {
     seedDatabase();
-    console.log('✅ SQLite database schema initialized & seeded successfully.');
+    console.log('✅ SQLite base schema verified & seeded successfully.');
 }
 catch (err) {
     console.error('❌ Database initialization error:', err.message);
 }
-app.listen(ENV.PORT, () => {
-    console.log(`🚀 GreenWave WhatsApp Platform Server running on http://localhost:${ENV.PORT}`);
+// Asynchronously initialize MySQL pool if configured
+initDatabaseConnections().catch((err) => {
+    console.warn('[Database Engine] Async database initialization warning:', err.message);
+});
+// Omnichannel Automated Lifecycle Background Engine (Periodic check every 12h)
+setTimeout(() => {
+    ClientLifecycleService.runScheduledLifecycleCheck().catch(e => console.warn('[Lifecycle Engine Startup Check Notice]:', e.message));
+}, 5000);
+setInterval(() => {
+    ClientLifecycleService.runScheduledLifecycleCheck().catch(e => console.warn('[Lifecycle Engine Routine Check Notice]:', e.message));
+}, 12 * 60 * 60 * 1000);
+const server = app.listen(ENV.PORT, () => {
+    console.log(`🚀 MetaGreenWave Platform Server running on http://localhost:${ENV.PORT}`);
     console.log(`📡 Meta Cloud API Webhook URL: http://localhost:${ENV.PORT}/api/v1/webhooks/whatsapp`);
     console.log(`📖 OpenAPI Documentation: http://localhost:${ENV.PORT}/api/v1/docs`);
 });
+// Graceful Shutdown: Drain MySQL Pool and Terminate
+const handleShutdown = async (signal) => {
+    console.log(`\n[Server] Received ${signal}. Draining connection pools and shutting down...`);
+    await mySqlEngine.close();
+    server.close(() => {
+        console.log('[Server] HTTP server closed gracefully.');
+        process.exit(0);
+    });
+};
+process.on('SIGINT', () => handleShutdown('SIGINT'));
+process.on('SIGTERM', () => handleShutdown('SIGTERM'));

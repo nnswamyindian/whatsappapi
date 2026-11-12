@@ -9,8 +9,8 @@ export const FaqPage: React.FC = () => {
   const allFaqs = [
     {
       category: 'General & Onboarding',
-      q: 'What is GreenWave?',
-      a: 'GreenWave is a multi-tenant WhatsApp Business Messaging SaaS platform. It enables businesses to manage broadcast campaigns, collaborate in a shared team inbox, build automated visual chatbots, and track sales leads in a WhatsApp-native CRM.',
+      q: 'What is MetaGreenWave?',
+      a: 'MetaGreenWave is a multi-tenant WhatsApp Business Messaging SaaS platform. It enables businesses to manage broadcast campaigns, collaborate in a shared team inbox, build automated visual chatbots, and track sales leads in a WhatsApp-native CRM.',
     },
     {
       category: 'General & Onboarding',
@@ -20,7 +20,7 @@ export const FaqPage: React.FC = () => {
     {
       category: 'Meta WhatsApp Cloud API',
       q: 'What is Meta Embedded Signup?',
-      a: 'Meta Embedded Signup is the official Facebook Login popup dialog where you select or create your WhatsApp Business Account (WABA), verify your phone number via SMS/Voice OTP, and grant messaging permissions directly to GreenWave. Your credentials are authenticated server-side and encrypted with AES-256 at rest.',
+      a: 'Meta Embedded Signup is the official Facebook Login popup dialog where you select or create your WhatsApp Business Account (WABA), verify your phone number via SMS/Voice OTP, and grant messaging permissions directly to MetaGreenWave. Your credentials are authenticated server-side and encrypted with AES-256 at rest.',
     },
     {
       category: 'Meta WhatsApp Cloud API',
@@ -34,18 +34,18 @@ export const FaqPage: React.FC = () => {
     },
     {
       category: 'Campaigns & Templates',
-      q: 'How does GreenWave handle opt-outs and STOP replies?',
-      a: 'GreenWave features automated reply classification rules. When a recipient replies "STOP", "UNSUBSCRIBE", or similar keywords, they are immediately added to your workspace suppression list. GreenWave strictly prevents any further promotional campaign deliveries to that number.',
+      q: 'How does MetaGreenWave handle opt-outs and STOP replies?',
+      a: 'MetaGreenWave features automated reply classification rules. When a recipient replies "STOP", "UNSUBSCRIBE", or similar keywords, they are immediately added to your workspace suppression list. MetaGreenWave strictly prevents any further promotional campaign deliveries to that number.',
     },
     {
       category: 'Billing & Ledgers',
       q: 'How are Meta conversation fees billed?',
-      a: 'Meta charges per 24-hour conversation window based on category (Marketing, Utility, Authentication, or Service). In GreenWave, your wallet balance maintains a transparent double-entry ledger reflecting the exact provider rate and our minimal platform fee ($0.001 - $0.002) with zero hidden markups.',
+      a: 'Meta charges per 24-hour conversation window based on category (Marketing, Utility, Authentication, or Service). In MetaGreenWave, your wallet balance maintains a transparent double-entry ledger reflecting the exact provider rate and our minimal platform fee ($0.001 - $0.002) with zero hidden markups.',
     },
     {
       category: 'Shared Team Inbox',
       q: 'What is the 24-Hour Customer Service Window?',
-      a: 'When a customer sends your business an inbound WhatsApp message, a 24-hour service window opens. During this window, you can exchange free-form text, images, and audio messages without needing an approved template. GreenWave shows a live countdown timer for each conversation.',
+      a: 'When a customer sends your business an inbound WhatsApp message, a 24-hour service window opens. During this window, you can exchange free-form text, images, and audio messages without needing an approved template. MetaGreenWave shows a live countdown timer for each conversation.',
     },
   ];
 

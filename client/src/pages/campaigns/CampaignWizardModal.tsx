@@ -227,7 +227,7 @@ export const CampaignWizardModal: React.FC<CampaignWizardModalProps> = ({
                 <div>
                   <div className="font-bold">Automated WhatsApp Compliance Enforcement</div>
                   <div className="text-emerald-800 text-[11px] mt-0.5">
-                    GreenWave will automatically cross-check every recipient against your workspace suppression and opt-out list before submitting to Meta. Suppressed contacts are excluded automatically with zero charges.
+                    MetaGreenWave will automatically cross-check every recipient against your workspace suppression and opt-out list before submitting to Meta. Suppressed contacts are excluded automatically with zero charges.
                   </div>
                 </div>
               </div>
@@ -379,7 +379,7 @@ export const CampaignWizardModal: React.FC<CampaignWizardModalProps> = ({
                     </span>
                   </div>
                   <div className="flex justify-between py-1 border-b border-slate-100">
-                    <span className="text-slate-600">GreenWave Platform Infrastructure Fee:</span>
+                    <span className="text-slate-600">MetaGreenWave Platform Infrastructure Fee:</span>
                     <span className="font-mono font-semibold">
                       ${estimate.costBreakdown.estimatedPlatformCharges.toFixed(2)} (${estimate.costBreakdown.platformFeePerMsg}/msg)
                     </span>

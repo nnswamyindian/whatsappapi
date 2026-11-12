@@ -104,7 +104,7 @@ export const SolutionsPage: React.FC = () => {
           Tailored Workflows for Your Business Model
         </h1>
         <p className="text-base sm:text-lg text-slate-600 leading-relaxed">
-          Discover how organizations across retail, education, healthcare, and professional services use GreenWave to drive measurable revenue and delight customers on WhatsApp.
+          Discover how organizations across retail, education, healthcare, and professional services use MetaGreenWave to drive measurable revenue and delight customers on WhatsApp.
         </p>
       </div>
 

@@ -1,7 +1,7 @@
 {
-  "name": "GreenWave WhatsApp Business Platform",
-  "short_name": "GreenWave",
-  "description": "Production-grade WhatsApp Business Messaging, Shared Team Inbox, and Automation Platform",
+  "name": "MetaGreenWave Enterprise WhatsApp Platform",
+  "short_name": "MetaGreenWave",
+  "description": "Enterprise-grade Meta WhatsApp Business Messaging, Shared Team Inbox, and CRM Automation Platform",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#ffffff",
@@ -17,3 +17,4 @@
   ],
   "categories": ["business", "productivity", "utilities"]
 }
+

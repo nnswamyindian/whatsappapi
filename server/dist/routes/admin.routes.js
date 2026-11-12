@@ -4,6 +4,7 @@ import { authMiddleware } from '../middleware/auth.js';
 import { requirePlatformAdmin } from '../middleware/rbac.js';
 import { EmailService } from '../services/email.js';
 import { NotificationService } from '../services/notifications.js';
+import { ClientLifecycleService, MARKETING_PLAYBOOKS, FESTIVAL_CALENDAR } from '../services/client-lifecycle.js';
 import { v4 as uuidv4 } from 'uuid';
 const router = Router();
 router.use(authMiddleware);
@@ -131,24 +132,15 @@ router.post('/applications/:id/approve', async (req, res) => {
             now,
         ]);
     });
-    // 5. Send approval email to customer
-    const onboardingUrl = `${process.env.APP_URL || 'http://localhost:5000'}/onboarding`;
-    await EmailService.send({
-        recipient: app.email,
-        templateSlug: 'application_approved',
-        variables: {
-            fullName: app.owner_name,
-            businessName: app.business_name,
-            onboardingUrl,
-        },
-    });
+    // 5. Send omnichannel WhatsApp + Email approval notifications
+    ClientLifecycleService.notifyApplicationApproved(app).catch(e => console.warn('[Admin Lifecycle Approval] Notice:', e.message));
     // 6. In-App Notification
     NotificationService.notify({
         organizationId: app.organization_id,
         userId: app.user_id,
         type: 'approval',
         title: 'Workspace Approved! 🎉',
-        message: 'Your GreenWave application is approved! Start guided onboarding to connect your WhatsApp Business Account.',
+        message: 'Your MetaGreenWave application is approved! Start guided onboarding to connect your WhatsApp Business Account.',
         link: '/onboarding',
     });
     res.json({ success: true, message: `Application for ${app.business_name} approved successfully.` });
@@ -397,6 +389,166 @@ router.put('/plans/:id', (req, res) => {
         req.params.id,
     ]);
     res.json({ success: true, message: 'Plan updated.' });
+});
+// ==============================================================================
+// 6. Platform Subscriptions & MRR Oversight
+// ==============================================================================
+router.get('/subscriptions', (req, res) => {
+    const subscriptions = db.query(`
+    SELECT s.*, o.name as org_name, o.slug as org_slug, o.phone_e164, o.plan_tier as current_tier,
+           sp.name as plan_name, sp.monthly_price_usd, sp.yearly_price_usd,
+           u.email as owner_email, u.full_name as owner_name
+    FROM organizations o
+    LEFT JOIN subscriptions s ON s.organization_id = o.id
+    LEFT JOIN subscription_plans sp ON sp.id = s.plan_id OR sp.slug = o.plan_tier
+    LEFT JOIN memberships m ON m.organization_id = o.id AND m.role = 'owner'
+    LEFT JOIN users u ON u.id = m.user_id
+    ORDER BY s.created_at DESC
+  `);
+    // Compute MRR & ARR
+    let mrr = 0;
+    let activePaidCount = 0;
+    subscriptions.forEach(sub => {
+        if (sub.status === 'active' || (!sub.status && sub.current_tier !== 'starter')) {
+            activePaidCount++;
+            const monthlyPrice = sub.monthly_price_usd || (sub.current_tier === 'growth' ? 79 : sub.current_tier === 'enterprise' ? 199 : 29);
+            mrr += monthlyPrice;
+        }
+    });
+    const arr = mrr * 12;
+    res.json({
+        metrics: {
+            totalOrganizations: subscriptions.length,
+            activePaidClients: activePaidCount,
+            mrr: Number(mrr.toFixed(2)),
+            arr: Number(arr.toFixed(2)),
+            arpu: activePaidCount > 0 ? Number((mrr / activePaidCount).toFixed(2)) : 0,
+        },
+        subscriptions,
+    });
+});
+router.post('/subscriptions/:orgId/override', (req, res) => {
+    const { orgId } = req.params;
+    const { planSlug, status, renewalDate } = req.body;
+    const now = new Date().toISOString();
+    const plan = db.queryOne('SELECT * FROM subscription_plans WHERE slug = ?', [planSlug]);
+    db.transaction(() => {
+        if (plan) {
+            db.execute(`UPDATE organizations
+         SET plan_tier = ?, contact_limit = ?, team_limit = ?, campaign_limit = ?, updated_at = ?
+         WHERE id = ?`, [plan.slug, plan.contact_limit, plan.team_member_limit, plan.campaign_limit, now, orgId]);
+        }
+        db.execute(`INSERT INTO subscriptions
+       (id, organization_id, plan_id, billing_cycle, status, start_date, renewal_date, created_at, updated_at)
+       VALUES (?, ?, ?, 'monthly', ?, ?, ?, ?, ?)
+       ON CONFLICT(organization_id) DO UPDATE SET
+         plan_id = COALESCE(excluded.plan_id, subscriptions.plan_id),
+         status = COALESCE(excluded.status, subscriptions.status),
+         renewal_date = COALESCE(excluded.renewal_date, subscriptions.renewal_date),
+         updated_at = excluded.updated_at`, [
+            `sub_${uuidv4().substring(0, 8)}`,
+            orgId,
+            plan?.id || 'plan_starter',
+            status || 'active',
+            now,
+            renewalDate || new Date(Date.now() + 30 * 86400000).toISOString(),
+            now,
+            now,
+        ]);
+        db.execute(`INSERT INTO audit_logs (id, organization_id, user_id, user_email, action, resource_type, resource_id, details_json, created_at)
+       VALUES (?, ?, ?, ?, 'SUBSCRIPTION_OVERRIDDEN', 'subscription', ?, ?, ?)`, [
+            uuidv4(),
+            orgId,
+            req.auth.userId,
+            req.auth.email,
+            orgId,
+            JSON.stringify({ planSlug, status, renewalDate }),
+            now,
+        ]);
+    });
+    res.json({ success: true, message: 'Tenant subscription successfully updated.' });
+});
+// ==============================================================================
+// 7. Omnichannel Lifecycle Engine (WhatsApp + Email Follow-Ups)
+// ==============================================================================
+router.get('/lifecycle/dispatches', (req, res) => {
+    const dispatches = db.query(`
+    SELECT ld.*, o.name as org_name
+    FROM lifecycle_dispatches ld
+    LEFT JOIN organizations o ON o.id = ld.organization_id
+    ORDER BY ld.dispatched_at DESC
+    LIMIT 100
+  `);
+    res.json(dispatches);
+});
+router.get('/lifecycle/playbooks', (req, res) => {
+    res.json(MARKETING_PLAYBOOKS);
+});
+router.get('/lifecycle/festivals', (req, res) => {
+    res.json(FESTIVAL_CALENDAR);
+});
+router.post('/lifecycle/send-nurture', async (req, res) => {
+    const { organizationId, playbookId } = req.body;
+    const playbook = MARKETING_PLAYBOOKS.find(p => p.id === Number(playbookId)) || MARKETING_PLAYBOOKS[0];
+    let targetOrgs = [];
+    if (organizationId && organizationId !== 'all') {
+        const org = db.queryOne('SELECT * FROM organizations WHERE id = ?', [organizationId]);
+        if (org)
+            targetOrgs.push(org);
+    }
+    else {
+        targetOrgs = db.query("SELECT * FROM organizations WHERE status = 'active'");
+    }
+    let sentCount = 0;
+    for (const org of targetOrgs) {
+        if (!org.phone_e164)
+            continue;
+        await ClientLifecycleService.dispatch({
+            organizationId: org.id,
+            recipientPhone: org.phone_e164,
+            eventType: 'marketing_guide',
+            title: playbook.title,
+            whatsappBody: playbook.content,
+            emailSubject: playbook.title,
+            emailHtml: `<div style="font-family: sans-serif; padding: 20px;"><h2>${playbook.title}</h2><p>${playbook.content.replace(/\n/g, '<br>')}</p></div>`,
+            metadata: { playbookId: playbook.id },
+        });
+        sentCount++;
+    }
+    res.json({ success: true, message: `Dispatched growth playbook to ${sentCount} organization(s) via WhatsApp!` });
+});
+router.post('/lifecycle/send-festival', async (req, res) => {
+    const { festivalName, organizationId } = req.body;
+    const festival = FESTIVAL_CALENDAR.find(f => f.name === festivalName) || FESTIVAL_CALENDAR[0];
+    let targetOrgs = [];
+    if (organizationId && organizationId !== 'all') {
+        const org = db.queryOne('SELECT * FROM organizations WHERE id = ?', [organizationId]);
+        if (org)
+            targetOrgs.push(org);
+    }
+    else {
+        targetOrgs = db.query("SELECT * FROM organizations WHERE status = 'active'");
+    }
+    let sentCount = 0;
+    for (const org of targetOrgs) {
+        if (!org.phone_e164)
+            continue;
+        await ClientLifecycleService.dispatch({
+            organizationId: org.id,
+            recipientPhone: org.phone_e164,
+            eventType: 'festival_wishes',
+            title: `${festival.name} Greetings`,
+            whatsappBody: festival.message,
+            emailSubject: `🎉 ${festival.name} Greetings from MetaGreenWave`,
+            emailHtml: `<div style="font-family: sans-serif; padding: 20px;"><h2>${festival.name} Greetings</h2><p>${festival.message.replace(/\n/g, '<br>')}</p></div>`,
+        });
+        sentCount++;
+    }
+    res.json({ success: true, message: `Dispatched festival greetings to ${sentCount} client(s) via WhatsApp!` });
+});
+router.post('/lifecycle/run-check', async (req, res) => {
+    const result = await ClientLifecycleService.runScheduledLifecycleCheck();
+    res.json({ success: true, message: 'Automated lifecycle check completed.', result });
 });
 // ==============================================================================
 // 6. Security Audit Logs

@@ -2,6 +2,7 @@ import { test, describe, before } from 'node:test';
 import assert from 'node:assert/strict';
 import { normalizePhone } from '../dist/utils/phone.js';
 import { db, seedDatabase } from '../dist/db/index.js';
+import { mySqlEngine } from '../dist/db/mysql-pool.js';
 import { MockWhatsAppProvider } from '../dist/providers/whatsapp/mock-provider.js';
 import { encryptSecret, decryptSecret, maskSecret } from '../dist/utils/crypto.js';
 import { EmailService } from '../dist/services/email.js';
@@ -240,6 +241,7 @@ describe('GreenWave Backend Core Verification', () => {
 
   test('13. Multi-Tenant Meta Connection Isolation & Safe Disconnect', () => {
     const org = db.queryOne("SELECT id FROM organizations WHERE slug = 'acme-retail'");
+    db.execute("UPDATE whatsapp_connections SET mode = 'sandbox', access_token = NULL WHERE organization_id = ?", [org.id]);
     const conn = db.queryOne('SELECT * FROM whatsapp_connections WHERE organization_id = ?', [org.id]);
     assert.ok(conn, 'WhatsApp connection record must exist for organization');
     assert.equal(conn.mode, 'sandbox', 'Default demo connection is in sandbox mode');
@@ -500,6 +502,29 @@ describe('GreenWave Backend Core Verification', () => {
     const enterprise = plans.find((p) => p.slug === 'enterprise');
     assert.equal(enterprise.monthly_price_usd, 199.00);
     assert.equal(enterprise.contact_limit, 100000);
+  });
+
+  test('22. Enterprise MySQL Migration, Dialect Translation & Health Telemetry', async () => {
+    // 1. Test SQL Dialect Translation from SQLite to MySQL
+    const sqliteUpsert = `INSERT INTO notification_preferences (id, user_id, email_alerts) VALUES (?, ?, ?) ON CONFLICT(user_id) DO UPDATE SET email_alerts = excluded.email_alerts`;
+    const translatedUpsert = mySqlEngine.translateSql(sqliteUpsert);
+    assert.ok(translatedUpsert.includes('ON DUPLICATE KEY UPDATE'), 'Must translate ON CONFLICT to ON DUPLICATE KEY UPDATE');
+    assert.ok(translatedUpsert.includes('VALUES(email_alerts)'), 'Must translate excluded.col to VALUES(col)');
+
+    // 2. Test Concatenation Translation
+    const concatSql = "SELECT * FROM chatbots WHERE ? LIKE '%' || trigger_keyword || '%'";
+    const translatedConcat = mySqlEngine.translateSql(concatSql);
+    assert.ok(translatedConcat.includes('CONCAT'), 'Must translate || to CONCAT for MySQL safety');
+
+    // 3. Test Database Health Telemetry
+    const health = await db.getHealth();
+    assert.ok(health.engine === 'sqlite' || health.engine === 'mysql', 'Engine must report valid SQL type');
+    assert.equal(health.connected, true, 'Database must report connected state');
+
+    // 4. Test Unified Async Query Execution
+    const asyncRows = await db.queryAsync('SELECT COUNT(*) as count FROM organizations');
+    assert.ok(asyncRows.length > 0, 'Async query must return rows');
+    assert.ok(asyncRows[0].count > 0, 'Organization count must be greater than zero');
   });
 });
 

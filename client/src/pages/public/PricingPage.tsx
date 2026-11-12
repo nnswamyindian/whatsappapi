@@ -151,7 +151,7 @@ export const PricingPage: React.FC = () => {
             How Meta's Official Conversation Pricing Works
           </h3>
           <p className="text-xs text-slate-600 leading-relaxed">
-            WhatsApp conversations are billed directly per 24-hour window by Meta based on recipient country and conversation category. GreenWave reconciles these transparently with zero hidden markups.
+            WhatsApp conversations are billed directly per 24-hour window by Meta based on recipient country and conversation category. MetaGreenWave reconciles these transparently with zero hidden markups.
           </p>
         </div>
 

@@ -8,6 +8,7 @@ import { ENV } from '../config/env.js';
 import { authMiddleware } from '../middleware/auth.js';
 import { EmailService } from '../services/email.js';
 import { NotificationService } from '../services/notifications.js';
+import { ClientLifecycleService } from '../services/client-lifecycle.js';
 import { normalizePhone } from '../utils/phone.js';
 
 const router = Router();
@@ -174,6 +175,16 @@ router.post('/register', async (req: Request, res: Response) => {
         verifyUrl,
       },
     });
+
+    // Omnichannel WhatsApp + Email registration lifecycle notification
+    ClientLifecycleService.notifyApplicationReceived({
+      id: applicationId,
+      organization_id: orgId,
+      business_name: businessName.trim(),
+      owner_name: fullName.trim(),
+      email: cleanEmail,
+      phone_e164: phoneE164,
+    }).catch(err => console.warn('[Auth Lifecycle] Notice:', err.message));
 
     // Notify Super Admins
     NotificationService.notify({

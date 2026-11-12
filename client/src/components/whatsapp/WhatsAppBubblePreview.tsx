@@ -64,7 +64,7 @@ export const WhatsAppBubblePreview: React.FC<WhatsAppBubbleProps> = ({
             GW
           </div>
           <div>
-            <div className="text-xs font-semibold leading-tight">GreenWave Verified</div>
+            <div className="text-xs font-semibold leading-tight">MetaGreenWave Verified</div>
             <div className="text-[10px] text-emerald-100 leading-none">Official Business Account</div>
           </div>
         </div>

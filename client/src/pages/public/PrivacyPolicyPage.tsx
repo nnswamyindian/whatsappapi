@@ -16,7 +16,7 @@ export const PrivacyPolicyPage: React.FC = () => {
         <section className="space-y-3">
           <h2 className="text-lg font-bold text-slate-900">1. Overview & Scope</h2>
           <p>
-            GreenWave Technologies ("GreenWave", "we", "us", "our") provides a multi-tenant business messaging software platform that facilitates communication between business subscribers ("Customers") and their end-user recipients ("Recipients") via the official Meta WhatsApp Cloud API. This Privacy Policy details our practices concerning data collection, encryption, tenant isolation, and regulatory compliance under GDPR, CCPA, and Meta Platform Policies.
+            MetaGreenWave Technologies ("MetaGreenWave", "we", "us", "our") provides a multi-tenant business messaging software platform that facilitates communication between business subscribers ("Customers") and their end-user recipients ("Recipients") via the official Meta WhatsApp Cloud API. This Privacy Policy details our practices concerning data collection, encryption, tenant isolation, and regulatory compliance under GDPR, CCPA, and Meta Platform Policies.
           </p>
         </section>
 
@@ -50,7 +50,7 @@ export const PrivacyPolicyPage: React.FC = () => {
         <section className="space-y-3">
           <h2 className="text-lg font-bold text-slate-900">5. Multi-Tenant Scoping & Data Retention</h2>
           <p>
-            Every database query is strictly scoped by <code>organization_id</code>. Customers are strictly isolated from one another. Customers may request complete deletion of their workspace data, contacts, and message logs at any time by contacting our compliance officer at <code>privacy@greenwave.io</code>.
+            Every database query is strictly scoped by <code>organization_id</code>. Customers are strictly isolated from one another. Customers may request complete deletion of their workspace data, contacts, and message logs at any time by contacting our compliance officer at <code>privacy@metagreenwave.io</code>.
           </p>
         </section>
 
@@ -59,9 +59,9 @@ export const PrivacyPolicyPage: React.FC = () => {
           <p>
             For privacy inquiries, GDPR data subject access requests, or compliance questions, please contact:
             <br />
-            <strong>GreenWave Compliance & Data Protection Office</strong>
+            <strong>MetaGreenWave Compliance & Data Protection Office</strong>
             <br />
-            Email: <code>privacy@greenwave.io</code>
+            Email: <code>privacy@metagreenwave.io</code>
           </p>
         </section>
       </div>

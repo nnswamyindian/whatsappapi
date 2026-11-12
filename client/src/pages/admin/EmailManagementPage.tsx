@@ -79,7 +79,7 @@ export const EmailManagementPage: React.FC = () => {
         amount: '79.00',
         invoiceNumber: 'INV-2026-081',
         date: 'Nov 11, 2026',
-        supportEmail: 'support@greenwave.io',
+        supportEmail: 'support@metagreenwave.io',
       };
       const res = await api.post(`/admin/email-templates/${tpl.slug}/preview`, { variables: sampleVars });
       setPreviewData(res);

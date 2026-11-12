@@ -44,7 +44,7 @@ export const ContactPage: React.FC = () => {
                 <div className="w-9 h-9 rounded-xl bg-white border border-slate-200 flex items-center justify-center text-brand-600">
                   <Mail className="w-4 h-4" />
                 </div>
-                <span>support@greenwave.io</span>
+                <span>support@metagreenwave.io</span>
               </div>
               <div className="flex items-center gap-3">
                 <div className="w-9 h-9 rounded-xl bg-white border border-slate-200 flex items-center justify-center text-brand-600">
@@ -56,7 +56,7 @@ export const ContactPage: React.FC = () => {
                 <div className="w-9 h-9 rounded-xl bg-white border border-slate-200 flex items-center justify-center text-brand-600">
                   <MapPin className="w-4 h-4" />
                 </div>
-                <span>GreenWave SaaS Architecture Team &bull; Global Operations</span>
+                <span>MetaGreenWave SaaS Architecture Team &bull; Global Operations</span>
               </div>
             </div>
           </div>
@@ -73,7 +73,7 @@ export const ContactPage: React.FC = () => {
               <CheckCircle2 className="w-12 h-12 text-brand-600 mx-auto" />
               <h3 className="text-xl font-bold text-slate-900">Message Received!</h3>
               <p className="text-xs text-slate-600 max-w-xs mx-auto">
-                Thank you for contacting GreenWave. One of our solution engineers will reply to your email shortly.
+                Thank you for contacting MetaGreenWave. One of our solution engineers will reply to your email shortly.
               </p>
             </div>
           ) : (

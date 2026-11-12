@@ -433,7 +433,7 @@ export const CrmPipelinePage: React.FC = () => {
                 Intelligent Inbound Reply Classification Rules
               </h2>
               <p className="text-xs text-slate-500 mb-4">
-                When customers reply on WhatsApp, GreenWave evaluates keyword triggers, auto-tags contacts, routes leads to sales pipeline stages, and suppresses opted-out users from subsequent marketing campaigns.
+                When customers reply on WhatsApp, MetaGreenWave evaluates keyword triggers, auto-tags contacts, routes leads to sales pipeline stages, and suppresses opted-out users from subsequent marketing campaigns.
               </p>
 
               <div className="divide-y divide-slate-100 border border-slate-200 rounded-xl overflow-hidden">

@@ -1,7 +1,7 @@
 {
-  "name": "greenwave-whatsapp-platform",
-  "version": "1.0.0",
-  "description": "GreenWave - Production-Oriented WhatsApp Business Messaging SaaS Platform",
+  "name": "metagreenwave-whatsapp-platform",
+  "version": "2.0.0",
+  "description": "MetaGreenWave - Production-Oriented WhatsApp Business Messaging SaaS Platform",
   "private": true,
   "scripts": {
     "install:all": "npm install && cd server && npm install && cd ../client && npm install",
@@ -10,7 +10,17 @@
     "build:server": "cd server && npm run build",
     "build:client": "cd client && npm run build",
     "build": "npm run build:server && npm run build:client",
+    "lint:client": "cd client && npx tsc --noEmit",
+    "lint:server": "cd server && npx tsc --noEmit",
+    "lint": "npm run lint:client && npm run lint:server",
     "test": "cd server && npm test",
+    "test:core": "cd server && npm test",
+    "test:e2e": "node server/tests/enterprise-e2e.cjs",
+    "ci": "npm run lint && npm run build && npm run test:core && npm run test:e2e",
+    "ci:local": "powershell -ExecutionPolicy Bypass -File scripts/ci-local.ps1",
+    "docker:build": "docker build -t metagreenwave:latest .",
+    "docker:prod": "docker compose -f docker-compose.prod.yml up -d",
+    "db:migrate": "cd server && npm run db:migrate",
     "start": "cd server && npm start"
   },
   "keywords": [

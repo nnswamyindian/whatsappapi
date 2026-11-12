@@ -34,8 +34,8 @@ export const LandingPage: React.FC = () => {
 
   const faqs = [
     {
-      q: 'How does GreenWave connect to WhatsApp?',
-      a: 'GreenWave integrates with the official Meta WhatsApp Cloud API (v21.0) using official Meta Embedded Signup. You connect your official WhatsApp Business Account directly without unofficial browser sessions, phone-scanning hacks, or risk of number bans.',
+      q: 'How does MetaGreenWave connect to WhatsApp?',
+      a: 'MetaGreenWave integrates with the official Meta WhatsApp Cloud API (v21.0) using official Meta Embedded Signup. You connect your official WhatsApp Business Account directly without unofficial browser sessions, phone-scanning hacks, or risk of number bans.',
     },
     {
       q: 'Do I need a separate phone number for WhatsApp Business API?',
@@ -43,19 +43,19 @@ export const LandingPage: React.FC = () => {
     },
     {
       q: 'How do Meta conversation charges work?',
-      a: 'Meta charges per 24-hour conversation category (Marketing, Utility, Authentication, and Service). GreenWave displays transparent, country-specific rate cards in your wallet ledger with zero hidden surcharges so you always know your exact delivery costs.',
+      a: 'Meta charges per 24-hour conversation category (Marketing, Utility, Authentication, and Service). MetaGreenWave displays transparent, country-specific rate cards in your wallet ledger with zero hidden surcharges so you always know your exact delivery costs.',
     },
     {
-      q: 'What is the GreenWave platform approval process?',
+      q: 'What is the MetaGreenWave platform approval process?',
       a: 'To maintain high delivery quality and prevent spam, our compliance team reviews each new business registration. Once approved by Super Admin, you can immediately connect your Meta WhatsApp account and launch campaigns.',
     },
     {
       q: 'Can multiple agents manage the same WhatsApp number?',
-      a: 'Yes! GreenWave includes a Shared Team Inbox with agent assignment, 24-hour customer service window countdown timers, canned quick replies, and internal notes that customers never see.',
+      a: 'Yes! MetaGreenWave includes a Shared Team Inbox with agent assignment, 24-hour customer service window countdown timers, canned quick replies, and internal notes that customers never see.',
     },
     {
       q: 'What happens if a customer replies "STOP"?',
-      a: 'GreenWave features automated reply classification rules. If a recipient replies "STOP", they are automatically placed on your suppression blacklist, preventing any future promotional dispatches to comply with global messaging regulations.',
+      a: 'MetaGreenWave features automated reply classification rules. If a recipient replies "STOP", they are automatically placed on your suppression blacklist, preventing any future promotional dispatches to comply with global messaging regulations.',
     },
   ];
 
@@ -123,7 +123,7 @@ export const LandingPage: React.FC = () => {
                 <div className="w-3 h-3 rounded-full bg-rose-400"></div>
                 <div className="w-3 h-3 rounded-full bg-amber-400"></div>
                 <div className="w-3 h-3 rounded-full bg-emerald-400"></div>
-                <span className="ml-3 text-xs font-semibold text-slate-400">greenwave.app / workspace / live</span>
+                <span className="ml-3 text-xs font-semibold text-slate-400">metagreenwave.app / workspace / live</span>
               </div>
 
               {/* Tab Selector */}
@@ -370,12 +370,12 @@ export const LandingPage: React.FC = () => {
         </div>
       </section>
 
-      {/* 4. HOW GREENWAVE WORKS */}
+      {/* 4. HOW METAGREENWAVE WORKS */}
       <section id="how-it-works" className="bg-slate-50 py-20 border-y border-slate-200">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-12">
           <div className="text-center space-y-3 max-w-3xl mx-auto">
             <h2 className="text-3xl sm:text-4xl font-extrabold text-slate-900 tracking-tight">
-              How GreenWave Works
+              How MetaGreenWave Works
             </h2>
             <p className="text-slate-600 text-base">
               A transparent, compliance-first journey from business registration to your first live broadcast.
@@ -443,7 +443,7 @@ export const LandingPage: React.FC = () => {
             Built for High-Growth Industries
           </h2>
           <p className="text-slate-600 text-base">
-            Every business vertical has unique communication workflows. GreenWave supports them all.
+            Every business vertical has unique communication workflows. MetaGreenWave supports them all.
           </p>
         </div>
 
@@ -518,7 +518,7 @@ export const LandingPage: React.FC = () => {
               Simple, Predictable Platform Pricing
             </h2>
             <p className="text-slate-600 text-base">
-              GreenWave charges a straightforward workspace subscription for platform software. WhatsApp message charges are billed directly at transparent Meta rates.
+              MetaGreenWave charges a straightforward workspace subscription for platform software. WhatsApp message charges are billed directly at transparent Meta rates.
             </p>
           </div>
 
@@ -616,7 +616,7 @@ export const LandingPage: React.FC = () => {
               💡 Complete Transparency on Meta Messaging Fees
             </h4>
             <p className="text-xs text-brand-800 leading-relaxed">
-              Unlike providers that disguise messaging fees, GreenWave reconciles Meta's actual conversation fees directly via transparent double-entry ledgers. For example, India utility messages are ~$0.0018, marketing ~$0.0099; US messages ~$0.0150. No fabricated "unlimited" promises.
+              Unlike providers that disguise messaging fees, MetaGreenWave reconciles Meta's actual conversation fees directly via transparent double-entry ledgers. For example, India utility messages are ~$0.0018, marketing ~$0.0099; US messages ~$0.0150. No fabricated "unlimited" promises.
             </p>
           </div>
         </div>
@@ -626,7 +626,7 @@ export const LandingPage: React.FC = () => {
       <section className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 space-y-8">
         <div className="text-center space-y-2">
           <h2 className="text-3xl font-extrabold text-slate-900 tracking-tight">Frequently Asked Questions</h2>
-          <p className="text-slate-600 text-sm">Everything you need to know about GreenWave and WhatsApp Business API.</p>
+          <p className="text-slate-600 text-sm">Everything you need to know about MetaGreenWave and WhatsApp Business API.</p>
         </div>
 
         <div className="space-y-3">
@@ -658,7 +658,7 @@ export const LandingPage: React.FC = () => {
             Ready to upgrade your customer conversations?
           </h2>
           <p className="text-brand-100 text-sm sm:text-base max-w-xl mx-auto font-normal">
-            Join hundreds of forward-thinking businesses using GreenWave to power broadcasts, chatbots, and customer support on WhatsApp.
+            Join hundreds of forward-thinking businesses using MetaGreenWave to power broadcasts, chatbots, and customer support on WhatsApp.
           </p>
           <div className="pt-2">
             <Link
