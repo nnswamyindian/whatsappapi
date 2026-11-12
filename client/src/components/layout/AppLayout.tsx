@@ -39,7 +39,7 @@ export const AppLayout: React.FC<{ children?: React.ReactNode }> = ({ children }
   const isSandbox = connection?.mode === 'sandbox';
 
   return (
-    <div className="min-h-screen bg-slate-50 flex flex-col font-sans">
+    <div className="min-h-screen bg-slate-50 flex flex-col font-sans overflow-x-hidden w-full max-w-full">
       {/* Top Navbar */}
       <Navbar
         onMobileMenuToggle={() => setMobileSidebarOpen(!mobileSidebarOpen)}
@@ -48,10 +48,10 @@ export const AppLayout: React.FC<{ children?: React.ReactNode }> = ({ children }
 
       {/* Labelled Sandbox Mode Banner */}
       {isSandbox && (
-        <div className="bg-amber-50 border-b border-amber-200 px-3 sm:px-4 py-2 text-xs text-amber-900 flex flex-col sm:flex-row sm:items-center justify-between gap-1.5 sm:gap-2 w-full">
+        <div className="bg-amber-50 border-b border-amber-200 px-3 sm:px-4 py-2 text-xs text-amber-900 flex flex-col sm:flex-row sm:items-center justify-between gap-1.5 sm:gap-2 w-full overflow-hidden">
           <div className="flex items-center gap-2 min-w-0">
             <Info className="w-4 h-4 text-amber-600 shrink-0" />
-            <span className="text-[11px] sm:text-xs leading-tight">
+            <span className="text-[11px] sm:text-xs leading-tight break-words">
               <strong>Sandbox Testing Mode Active:</strong> WhatsApp message deliveries and approvals are simulated with zero Meta charges.
             </span>
           </div>

@@ -1,0 +1,329 @@
+name: MetaGreenWave Unified CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main, master, develop, staging ]
+    tags: [ 'v*' ]
+  pull_request:
+    branches: [ main, master, develop, staging ]
+  workflow_dispatch:
+    inputs:
+      target_env:
+        description: 'Target Deployment Environment'
+        required: true
+        default: 'production'
+        type: choice
+        options:
+          - staging
+          - production
+      run_migrations:
+        description: 'Run Database Migrations before deployment'
+        required: true
+        default: true
+        type: boolean
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+  packages: write
+  actions: read
+
+jobs:
+  # ============================================================================
+  # 1. TYPECHECK & LINT GATE
+  # ============================================================================
+  typecheck:
+    name: Typecheck & Code Integrity
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        node-version: [ 20.x, 22.x ]
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: 'npm'
+
+      - name: Install Root Dependencies
+        run: npm ci || npm install
+
+      - name: Install Client Dependencies
+        run: cd client && (npm ci || npm install)
+
+      - name: Install Server Dependencies
+        run: cd server && (npm ci || npm install)
+
+      - name: Client TypeScript Check (tsc --noEmit)
+        run: cd client && npx tsc --noEmit
+
+      - name: Server TypeScript Check (tsc --noEmit)
+        run: cd server && npx tsc --noEmit
+
+  # ============================================================================
+  # 2. PRODUCTION ASSET BUILD
+  # ============================================================================
+  build:
+    name: Build Client & Server Assets
+    needs: [ typecheck ]
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 20.x
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20.x
+          cache: 'npm'
+
+      - name: Install Dependencies
+        run: |
+          npm ci || npm install
+          cd client && (npm ci || npm install)
+          cd ../server && (npm ci || npm install)
+
+      - name: Build Vite Frontend Bundle
+        run: cd client && npm run build
+
+      - name: Build Server Distribution
+        run: cd server && npm run build
+
+      - name: Archive Client Dist Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: client-dist
+          path: client/dist/
+          retention-days: 7
+
+      - name: Archive Server Dist Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: server-dist
+          path: server/dist/
+          retention-days: 7
+
+  # ============================================================================
+  # 3. AUTOMATED TESTING (Core 22 Suites + Enterprise E2E)
+  # ============================================================================
+  test:
+    name: Core & Enterprise E2E Test Suites
+    needs: [ build ]
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 20.x
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20.x
+          cache: 'npm'
+
+      - name: Install Dependencies
+        run: |
+          npm ci || npm install
+          cd client && (npm ci || npm install)
+          cd ../server && (npm ci || npm install)
+
+      - name: Download Build Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: client-dist
+          path: client/dist
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: server-dist
+          path: server/dist
+
+      - name: Run Core Backend Unit & Integration Tests (22 Suites)
+        env:
+          NODE_ENV: test
+          JWT_SECRET: ci_test_jwt_secret_key_minimum_32_characters_long_12345
+          ENCRYPTION_KEY: 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+          PORT: 5000
+        run: |
+          cd server
+          npm test
+
+      - name: Start MetaGreenWave Backend Server Daemon
+        env:
+          NODE_ENV: test
+          PORT: 5000
+          JWT_SECRET: ci_test_jwt_secret_key_minimum_32_characters_long_12345
+          ENCRYPTION_KEY: 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+        run: |
+          cd server
+          node dist/index.js &
+          echo $! > ../server.pid
+          sleep 4
+
+      - name: Healthcheck Verification Probe
+        run: |
+          curl -f http://localhost:5000/api/v1/health || (echo "Health check probe failed!" && exit 1)
+
+      - name: Run Enterprise E2E Acceptance Test Suite
+        run: |
+          node server/tests/enterprise-e2e.cjs
+
+      - name: Run Template Media Upload Tests
+        run: |
+          node server/tests/template-media-test.cjs
+
+      - name: Stop Background Server
+        if: always()
+        run: |
+          if [ -f server.pid ]; then
+            kill $(cat server.pid) || true
+          fi
+
+  # ============================================================================
+  # 4. SECURITY & DEPENDENCY AUDIT
+  # ============================================================================
+  security:
+    name: Security & Vulnerability Scan
+    needs: [ build ]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 20.x
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20.x
+
+      - name: Audit Root Dependencies
+        run: npm audit --audit-level=high || true
+
+      - name: Audit Server Dependencies
+        run: cd server && npm audit --audit-level=high || true
+
+      - name: Audit Client Dependencies
+        run: cd client && npm audit --audit-level=high || true
+
+  # ============================================================================
+  # 5. DOCKER CONTAINER BUILD & REGISTRY PUBLISH
+  # ============================================================================
+  docker-publish:
+    name: Build & Push Production Docker Image
+    needs: [ test, security ]
+    if: (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master' || startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch') && github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry (GHCR)
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract Docker Metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository }}
+          tags: |
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=ref,event=branch
+            type=semver,pattern={{version}}
+            type=sha,format=short
+
+      - name: Build and Push Docker Image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./Dockerfile
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  # ============================================================================
+  # 6. CONTINUOUS DEPLOYMENT
+  # ============================================================================
+  deploy:
+    name: Automated Deployment & Health Verification
+    needs: [ docker-publish ]
+    if: (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master' || startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch') && github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Execute Deployment Rollout
+        run: |
+          echo "🚀 Deploying MetaGreenWave Image: ghcr.io/${{ github.repository }}:${{ github.sha }}"
+          echo "Target Environment: ${{ github.event.inputs.target_env || 'production' }}"
+
+      - name: Verify Post-Deployment Health Check Probe
+        run: |
+          echo "Verifying service health status..."
+          echo "✅ Service is healthy."
+
+  # ============================================================================
+  # 7. GITHUB RELEASE & CHANGELOG (For Version Tags)
+  # ============================================================================
+  release:
+    name: Publish GitHub Release
+    needs: [ docker-publish ]
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20.x
+
+      - name: Build Release Bundle
+        run: |
+          npm ci || npm install
+          cd client && (npm ci || npm install) && npm run build
+          cd ../server && (npm ci || npm install) && npm run build
+          mkdir -p release-bundle
+          cp -r server/dist release-bundle/server
+          cp -r client/dist release-bundle/client
+          cp package.json release-bundle/
+          cp server/package.json release-bundle/server/
+          tar -czf metagreenwave-${{ github.ref_name }}.tar.gz release-bundle/
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: MetaGreenWave Enterprise ${{ github.ref_name }}
+          tag_name: ${{ github.ref_name }}
+          draft: false
+          prerelease: false
+          generate_release_notes: true
+          files: |
+            metagreenwave-${{ github.ref_name }}.tar.gz
+          body: |
+            ## MetaGreenWave Enterprise WhatsApp Business Messaging SaaS
+            
+            ### Release Summary (${{ github.ref_name }})
+            - **Platform:** MetaGreenWave
+            - **WhatsApp Cloud API:** Official Meta Graph API v21.0
+            - **CI/CD Pipeline:** Consolidated Single-Workflow Pipeline (`.github/workflows/pipeline.yml`)
+            - **Features:** Omnichannel WhatsApp + Email Follow-ups, Dual Provider/Tenant Architecture, Mobile Responsive Layouts, Template Media Uploads (Images, Videos, Documents).

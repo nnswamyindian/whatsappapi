@@ -64,7 +64,7 @@ export const Navbar: React.FC<NavbarProps> = ({ onMobileMenuToggle, onOpenTopupM
           </div>
           <div className="min-w-0">
             <div className="flex items-center gap-1.5">
-              <span className="font-extrabold text-sm sm:text-base md:text-lg text-slate-900 tracking-tight leading-none">
+              <span className="font-extrabold text-xs sm:text-base md:text-lg text-slate-900 tracking-tight leading-none truncate max-w-[100px] sm:max-w-none">
                 MetaGreenWave
               </span>
               <span className="hidden md:inline-flex bg-brand-50 text-brand-700 text-[9px] font-extrabold px-1.5 py-0.5 rounded border border-brand-200">
@@ -82,10 +82,10 @@ export const Navbar: React.FC<NavbarProps> = ({ onMobileMenuToggle, onOpenTopupM
               setOrgDropdownOpen(!orgDropdownOpen);
               setUserDropdownOpen(false);
             }}
-            className="flex items-center gap-1 sm:gap-2 px-2 py-1 sm:px-3 sm:py-1.5 bg-slate-100 hover:bg-slate-200 rounded-lg text-xs font-semibold text-slate-800 transition-colors border border-slate-200 max-w-[105px] sm:max-w-none"
+            className="flex items-center gap-1 sm:gap-2 px-1.5 py-1 sm:px-3 sm:py-1.5 bg-slate-100 hover:bg-slate-200 rounded-lg text-xs font-semibold text-slate-800 transition-colors border border-slate-200 max-w-[90px] sm:max-w-none"
           >
             <Building2 className="w-3.5 h-3.5 text-brand-700 shrink-0" />
-            <span className="max-w-[55px] sm:max-w-[130px] truncate">{activeOrg?.name || 'Workspace'}</span>
+            <span className="max-w-[45px] sm:max-w-[130px] truncate">{activeOrg?.name || 'Workspace'}</span>
             <ChevronDown className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-slate-500 shrink-0" />
           </button>
 
