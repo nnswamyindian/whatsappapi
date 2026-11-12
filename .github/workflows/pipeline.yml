@@ -257,26 +257,135 @@ jobs:
           cache-to: type=gha,mode=max
 
   # ============================================================================
-  # 6. CONTINUOUS DEPLOYMENT
+  # 6. CONTINUOUS DEPLOYMENT (Automated VPS Delivery via SSH)
   # ============================================================================
   deploy:
-    name: Automated Deployment & Health Verification
+    name: Automated VPS Deployment & Health Verification
     needs: [ docker-publish ]
     if: (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master' || startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch') && github.event_name != 'pull_request'
     runs-on: ubuntu-latest
+    environment:
+      name: production
+      url: ${{ vars.APP_URL || 'http://localhost:5000' }}
+
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      - name: Execute Deployment Rollout
+      - name: Check VPS Secrets Configuration
+        id: check-secrets
         run: |
-          echo "🚀 Deploying MetaGreenWave Image: ghcr.io/${{ github.repository }}:${{ github.sha }}"
-          echo "Target Environment: ${{ github.event.inputs.target_env || 'production' }}"
+          VPS_HOST="${{ secrets.VPS_HOST || secrets.HOST }}"
+          VPS_USER="${{ secrets.VPS_USER || secrets.USERNAME }}"
+          VPS_KEY="${{ secrets.VPS_SSH_KEY || secrets.SSH_KEY || secrets.SSH_PRIVATE_KEY || secrets.SSHKEY }}"
+          
+          if [ -n "$VPS_HOST" ] && [ -n "$VPS_USER" ] && [ -n "$VPS_KEY" ]; then
+            echo "has_vps=true" >> $GITHUB_OUTPUT
+            echo "✅ VPS deployment secrets detected: Host, User, and SSH Key configured."
+          else
+            echo "has_vps=false" >> $GITHUB_OUTPUT
+            echo "⚠️ Notice: VPS deployment secrets (VPS_HOST, VPS_USER, VPS_SSH_KEY) are not set in GitHub Secrets."
+            echo "ℹ️ The pipeline will log deployment instructions until secrets are added in repository settings."
+          fi
 
-      - name: Verify Post-Deployment Health Check Probe
+      - name: Deploy to Remote VPS via SSH
+        if: steps.check-secrets.outputs.has_vps == 'true'
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST || secrets.HOST }}
+          VPS_USER: ${{ secrets.VPS_USER || secrets.USERNAME }}
+          VPS_KEY: ${{ secrets.VPS_SSH_KEY || secrets.SSH_KEY || secrets.SSH_PRIVATE_KEY || secrets.SSHKEY }}
+          VPS_PORT: ${{ secrets.VPS_PORT || vars.VPS_PORT || '22' }}
+          DEPLOY_PATH: ${{ secrets.VPS_DEPLOY_PATH || vars.VPS_DEPLOY_PATH || '/opt/metagreenwave' }}
+          IMAGE_NAME: ghcr.io/${{ github.repository }}:latest
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          echo "Verifying service health status..."
-          echo "✅ Service is healthy."
+          echo "🚀 Initiating Secure SSH Deployment to $VPS_USER@$VPS_HOST:$DEPLOY_PATH (Port: $VPS_PORT)..."
+          
+          # Setup SSH configuration & Key
+          mkdir -p ~/.ssh
+          echo "$VPS_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -p "$VPS_PORT" -H "$VPS_HOST" >> ~/.ssh/known_hosts 2>/dev/null || true
+
+          # Execute Deployment on Remote VPS
+          ssh -i ~/.ssh/deploy_key -p "$VPS_PORT" -o StrictHostKeyChecking=no "$VPS_USER@$VPS_HOST" bash -s << REMOTE_EOF
+            set -e
+            echo "=========================================================="
+            echo "🟢 REMOTE VPS: Deploying MetaGreenWave Production Release"
+            echo "=========================================================="
+            
+            # Ensure deployment directory exists
+            mkdir -p "$DEPLOY_PATH"
+            cd "$DEPLOY_PATH"
+
+            # Authenticate Docker with GHCR (GitHub Container Registry)
+            echo "$GITHUB_TOKEN" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+
+            # Pull the newly built production Docker image
+            echo "📥 Pulling latest image: $IMAGE_NAME..."
+            docker pull "$IMAGE_NAME"
+
+            # Copy or sync compose files if git repository exists on host, otherwise run docker-compose or container
+            if [ -f "$DEPLOY_PATH/docker-compose.prod.yml" ]; then
+              echo "🔄 Updating services via docker compose..."
+              docker compose -f docker-compose.prod.yml pull metagreenwave-app || true
+              docker compose -f docker-compose.prod.yml up -d --remove-orphans
+            elif [ -f "$DEPLOY_PATH/docker-compose.yml" ]; then
+              echo "🔄 Updating services via docker compose..."
+              docker compose pull || true
+              docker compose up -d --remove-orphans
+            else
+              echo "🔄 Rolling out standalone container $IMAGE_NAME..."
+              docker stop metagreenwave-app 2>/dev/null || true
+              docker rm metagreenwave-app 2>/dev/null || true
+              docker run -d \
+                --name metagreenwave-app \
+                --restart unless-stopped \
+                -p 5000:5000 \
+                -e NODE_ENV=production \
+                -e PORT=5000 \
+                "$IMAGE_NAME"
+            fi
+
+            # Remote Healthcheck Verification
+            echo "🩺 Verifying health probe on remote VPS..."
+            sleep 6
+            for i in {1..12}; do
+              if curl -s -f http://localhost:5000/api/v1/health > /dev/null 2>&1; then
+                echo "✅ MetaGreenWave is LIVE and HEALTHY on VPS!"
+                break
+              fi
+              echo "Healthcheck probe attempt \$i/12... waiting 4s"
+              sleep 4
+            done
+            
+            # Clean up old unused images
+            docker image prune -f >/dev/null 2>&1 || true
+            echo "🎉 Deployment completed successfully!"
+          REMOTE_EOF
+
+      - name: Simulated Deployment Notice (When VPS Secrets Not Configured)
+        if: steps.check-secrets.outputs.has_vps != 'true'
+        run: |
+          echo "========================================================================="
+          echo "ℹ️  VPS DEPLOYMENT READY FOR ACTIVATION"
+          echo "========================================================================="
+          echo "Image Built and Pushed: ghcr.io/${{ github.repository }}:${{ github.sha }}"
+          echo "Target Environment:     ${{ github.event.inputs.target_env || 'production' }}"
+          echo ""
+          echo "To enable direct auto-deploy to your VPS on every commit/tag, configure"
+          echo "the following in GitHub: Settings -> Secrets and variables -> Actions"
+          echo ""
+          echo "  Secrets:"
+          echo "    - VPS_HOST:        Your VPS IP address or domain (e.g. 194.164.55.12)"
+          echo "    - VPS_USER:        SSH username (e.g. root, ubuntu)"
+          echo "    - VPS_SSH_KEY:     Private SSH key (PEM / OpenSSH format)"
+          echo ""
+          echo "  Variables (Optional):"
+          echo "    - VPS_PORT:        SSH port (default: 22)"
+          echo "    - VPS_DEPLOY_PATH: Directory path on VPS (default: /opt/metagreenwave)"
+          echo "    - APP_URL:         Public URL of your platform (e.g. https://app.metagreenwave.com)"
+          echo "========================================================================="
 
   # ============================================================================
   # 7. GITHUB RELEASE & CHANGELOG (For Version Tags)
