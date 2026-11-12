@@ -8,7 +8,7 @@
     "build": "tsc",
     "typecheck": "tsc --noEmit",
     "start": "node dist/index.js",
-    "test": "node --test tests/**/*.test.js",
+    "test": "node --test tests/*.test.js",
     "db:migrate": "tsx src/db/migrate-sqlite-to-mysql.ts"
   },
   "dependencies": {
