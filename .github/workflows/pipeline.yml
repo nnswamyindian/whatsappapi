@@ -56,11 +56,11 @@ jobs:
       - name: Install Server Dependencies
         run: cd server && (npm ci || npm install)
 
-      - name: Client TypeScript Check (tsc --noEmit)
-        run: cd client && npx tsc --noEmit
+      - name: Client TypeScript Check (npm run typecheck)
+        run: cd client && npm run typecheck
 
-      - name: Server TypeScript Check (tsc --noEmit)
-        run: cd server && npx tsc --noEmit
+      - name: Server TypeScript Check (npm run typecheck)
+        run: cd server && npm run typecheck
 
   # ============================================================================
   # 2. PRODUCTION ASSET BUILD
