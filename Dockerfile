@@ -52,9 +52,8 @@ COPY --from=server-builder /app/server/dist ./server/dist
 # Copy compiled frontend assets to be served by Express
 COPY --from=client-builder /app/client/dist ./client/dist
 
-# Copy database migration tools and healthcheck probe
+# Copy operational scripts and healthcheck probe
 COPY scripts/ ./scripts/
-COPY server/src/db/migrate-sqlite-to-mysql.ts ./server/dist/db/migrate-sqlite-to-mysql.js 2>/dev/null || true
 
 # Set appropriate directory ownership for non-root execution
 RUN chown -R node:node /app
