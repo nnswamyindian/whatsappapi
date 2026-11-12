@@ -23,10 +23,15 @@ jobs:
         run: |
           npm install
           cd client && npm install
+          chmod +x node_modules/.bin/* 2>/dev/null || true
           cd ../server && npm install
+          chmod +x node_modules/.bin/* 2>/dev/null || true
+          cd ..
 
       - name: Build Project
-        run: npm run build
+        run: |
+          cd client && npm run build
+          cd ../server && npm run build
 
       - name: Deploy to VPS via SSH
         uses: appleboy/ssh-action@v1.2.0
@@ -57,8 +62,12 @@ jobs:
 
             # 2. Install dependencies & build on VPS
             echo "📦 Building client and server..."
-            cd client && npm install && npm run build
-            cd ../server && npm install && npm run build
+            cd client && npm install
+            chmod +x node_modules/.bin/* 2>/dev/null || true
+            npm run build
+            cd ../server && npm install
+            chmod +x node_modules/.bin/* 2>/dev/null || true
+            npm run build
             cd ..
 
             # 3. Reload application via PM2 or Node
