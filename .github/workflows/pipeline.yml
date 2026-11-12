@@ -28,7 +28,6 @@ concurrency:
 
 permissions:
   contents: write
-  packages: write
   actions: read
 
 jobs:
@@ -50,10 +49,6 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: ${{ matrix.node-version }}
-          cache: 'npm'
-
-      - name: Install Root Dependencies
-        run: npm ci || npm install
 
       - name: Install Client Dependencies
         run: cd client && (npm ci || npm install)
@@ -83,11 +78,9 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 20.x
-          cache: 'npm'
 
       - name: Install Dependencies
         run: |
-          npm ci || npm install
           cd client && (npm ci || npm install)
           cd ../server && (npm ci || npm install)
 
@@ -112,7 +105,7 @@ jobs:
           retention-days: 7
 
   # ============================================================================
-  # 3. AUTOMATED TESTING (Core 22 Suites + Enterprise E2E)
+  # 3. AUTOMATED TESTING (Core 22 Suites + Enterprise E2E + Media Uploads)
   # ============================================================================
   test:
     name: Core & Enterprise E2E Test Suites
@@ -127,21 +120,20 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 20.x
-          cache: 'npm'
 
       - name: Install Dependencies
         run: |
-          npm ci || npm install
           cd client && (npm ci || npm install)
           cd ../server && (npm ci || npm install)
 
-      - name: Download Build Artifacts
+      - name: Download Client Build Artifact
         uses: actions/download-artifact@v4
         with:
           name: client-dist
           path: client/dist
 
-      - uses: actions/download-artifact@v4
+      - name: Download Server Build Artifact
+        uses: actions/download-artifact@v4
         with:
           name: server-dist
           path: server/dist
@@ -203,65 +195,18 @@ jobs:
         with:
           node-version: 20.x
 
-      - name: Audit Root Dependencies
-        run: npm audit --audit-level=high || true
-
       - name: Audit Server Dependencies
-        run: cd server && npm audit --audit-level=high || true
+        run: cd server && (npm audit --audit-level=high || true)
 
       - name: Audit Client Dependencies
-        run: cd client && npm audit --audit-level=high || true
+        run: cd client && (npm audit --audit-level=high || true)
 
   # ============================================================================
-  # 5. DOCKER CONTAINER BUILD & REGISTRY PUBLISH
-  # ============================================================================
-  docker-publish:
-    name: Build & Push Production Docker Image
-    needs: [ test, security ]
-    if: (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master' || startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch') && github.event_name != 'pull_request'
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout Code
-        uses: actions/checkout@v4
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Log in to GitHub Container Registry (GHCR)
-        uses: docker/login-action@v3
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Extract Docker Metadata
-        id: meta
-        uses: docker/metadata-action@v5
-        with:
-          images: ghcr.io/${{ github.repository }}
-          tags: |
-            type=raw,value=latest,enable={{is_default_branch}}
-            type=ref,event=branch
-            type=semver,pattern={{version}}
-            type=sha,format=short
-
-      - name: Build and Push Docker Image
-        uses: docker/build-push-action@v5
-        with:
-          context: .
-          file: ./Dockerfile
-          push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-
-  # ============================================================================
-  # 6. CONTINUOUS DEPLOYMENT (Automated VPS Delivery via SSH)
+  # 5. CONTINUOUS DEPLOYMENT (Automated Native VPS Delivery via SSH - No Docker)
   # ============================================================================
   deploy:
     name: Automated VPS Deployment & Health Verification
-    needs: [ docker-publish ]
+    needs: [ test, security ]
     if: (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master' || startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch') && github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     environment:
@@ -288,7 +233,7 @@ jobs:
             echo "ℹ️ The pipeline will log deployment instructions until secrets are added in repository settings."
           fi
 
-      - name: Deploy to Remote VPS via SSH
+      - name: Deploy to Remote VPS via SSH (Native Node.js / PM2)
         if: steps.check-secrets.outputs.has_vps == 'true'
         env:
           VPS_HOST: ${{ secrets.VPS_HOST || secrets.HOST }}
@@ -296,8 +241,6 @@ jobs:
           VPS_KEY: ${{ secrets.VPS_SSH_KEY || secrets.SSH_KEY || secrets.SSH_PRIVATE_KEY || secrets.SSHKEY }}
           VPS_PORT: ${{ secrets.VPS_PORT || vars.VPS_PORT || '22' }}
           DEPLOY_PATH: ${{ secrets.VPS_DEPLOY_PATH || vars.VPS_DEPLOY_PATH || '/opt/metagreenwave' }}
-          IMAGE_NAME: ghcr.io/${{ github.repository }}:latest
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           echo "🚀 Initiating Secure SSH Deployment to $VPS_USER@$VPS_HOST:$DEPLOY_PATH (Port: $VPS_PORT)..."
           
@@ -311,57 +254,55 @@ jobs:
           ssh -i ~/.ssh/deploy_key -p "$VPS_PORT" -o StrictHostKeyChecking=no "$VPS_USER@$VPS_HOST" bash -s << REMOTE_EOF
             set -e
             echo "=========================================================="
-            echo "🟢 REMOTE VPS: Deploying MetaGreenWave Production Release"
+            echo "🟢 REMOTE VPS: Deploying MetaGreenWave (Native Node.js/PM2)"
             echo "=========================================================="
             
-            # Ensure deployment directory exists
             mkdir -p "$DEPLOY_PATH"
             cd "$DEPLOY_PATH"
 
-            # Authenticate Docker with GHCR (GitHub Container Registry)
-            echo "$GITHUB_TOKEN" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
-
-            # Pull the newly built production Docker image
-            echo "📥 Pulling latest image: $IMAGE_NAME..."
-            docker pull "$IMAGE_NAME"
-
-            # Copy or sync compose files if git repository exists on host, otherwise run docker-compose or container
-            if [ -f "$DEPLOY_PATH/docker-compose.prod.yml" ]; then
-              echo "🔄 Updating services via docker compose..."
-              docker compose -f docker-compose.prod.yml pull metagreenwave-app || true
-              docker compose -f docker-compose.prod.yml up -d --remove-orphans
-            elif [ -f "$DEPLOY_PATH/docker-compose.yml" ]; then
-              echo "🔄 Updating services via docker compose..."
-              docker compose pull || true
-              docker compose up -d --remove-orphans
+            # 1. Pull latest code or clone if directory is empty
+            if [ -d ".git" ]; then
+              echo "📥 Pulling latest git repository updates..."
+              git fetch --all
+              git checkout main
+              git pull origin main
             else
-              echo "🔄 Rolling out standalone container $IMAGE_NAME..."
-              docker stop metagreenwave-app 2>/dev/null || true
-              docker rm metagreenwave-app 2>/dev/null || true
-              docker run -d \
-                --name metagreenwave-app \
-                --restart unless-stopped \
-                -p 5000:5000 \
-                -e NODE_ENV=production \
-                -e PORT=5000 \
-                "$IMAGE_NAME"
+              echo "📥 Cloning repository into $DEPLOY_PATH..."
+              git clone https://github.com/nnswamyindian/whatsappapi.git .
             fi
 
-            # Remote Healthcheck Verification
-            echo "🩺 Verifying health probe on remote VPS..."
-            sleep 6
+            # 2. Install dependencies & build production assets
+            echo "📦 Building client and server..."
+            cd client && npm install --no-audit && npm run build
+            cd ../server && npm install --no-audit && npm run build
+            cd ..
+
+            # 3. Reload / Start application with PM2 or node daemon
+            if command -v pm2 &> /dev/null; then
+              echo "🔄 Restarting application via PM2..."
+              pm2 reload ecosystem.config.cjs --env production || pm2 start ecosystem.config.cjs --env production
+              pm2 save || true
+            else
+              echo "🔄 Restarting application via Node daemon..."
+              pkill -f "node dist/index.js" || true
+              sleep 1
+              cd server && nohup npm start > ../server.log 2>&1 &
+              cd ..
+            fi
+
+            # 4. Verify local healthcheck on the VPS
+            echo "🩺 Verifying MetaGreenWave healthcheck on VPS..."
+            sleep 4
             for i in {1..12}; do
               if curl -s -f http://localhost:5000/api/v1/health > /dev/null 2>&1; then
                 echo "✅ MetaGreenWave is LIVE and HEALTHY on VPS!"
                 break
               fi
-              echo "Healthcheck probe attempt \$i/12... waiting 4s"
-              sleep 4
+              echo "Healthcheck attempt \$i/12... waiting 3s"
+              sleep 3
             done
-            
-            # Clean up old unused images
-            docker image prune -f >/dev/null 2>&1 || true
-            echo "🎉 Deployment completed successfully!"
+
+            echo "🎉 VPS Deployment completed successfully!"
           REMOTE_EOF
 
       - name: Simulated Deployment Notice (When VPS Secrets Not Configured)
@@ -370,8 +311,7 @@ jobs:
           echo "========================================================================="
           echo "ℹ️  VPS DEPLOYMENT READY FOR ACTIVATION"
           echo "========================================================================="
-          echo "Image Built and Pushed: ghcr.io/${{ github.repository }}:${{ github.sha }}"
-          echo "Target Environment:     ${{ github.event.inputs.target_env || 'production' }}"
+          echo "Target Environment: ${{ github.event.inputs.target_env || 'production' }}"
           echo ""
           echo "To enable direct auto-deploy to your VPS on every commit/tag, configure"
           echo "the following in GitHub: Settings -> Secrets and variables -> Actions"
@@ -388,11 +328,11 @@ jobs:
           echo "========================================================================="
 
   # ============================================================================
-  # 7. GITHUB RELEASE & CHANGELOG (For Version Tags)
+  # 6. GITHUB RELEASE & CHANGELOG (For Version Tags)
   # ============================================================================
   release:
     name: Publish GitHub Release
-    needs: [ docker-publish ]
+    needs: [ deploy ]
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     steps:
@@ -401,16 +341,24 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Setup Node.js
+      - name: Setup Node.js 20.x
         uses: actions/setup-node@v4
         with:
           node-version: 20.x
 
-      - name: Build Release Bundle
+      - name: Download Build Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: client-dist
+          path: client/dist
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: server-dist
+          path: server/dist
+
+      - name: Package Release Bundle
         run: |
-          npm ci || npm install
-          cd client && (npm ci || npm install) && npm run build
-          cd ../server && (npm ci || npm install) && npm run build
           mkdir -p release-bundle
           cp -r server/dist release-bundle/server
           cp -r client/dist release-bundle/client
@@ -434,6 +382,5 @@ jobs:
             ### Release Summary (${{ github.ref_name }})
             - **Platform:** MetaGreenWave
             - **WhatsApp Cloud API:** Official Meta Graph API v21.0
-            - **CI/CD Pipeline:** Consolidated Single-Workflow Pipeline (`.github/workflows/pipeline.yml`)
+            - **Native Deployment:** Automated VPS Continuous Delivery over SSH (PM2 / Node.js)
             - **Features:** Omnichannel WhatsApp + Email Follow-ups, Dual Provider/Tenant Architecture, Mobile Responsive Layouts, Template Media Uploads (Images, Videos, Documents).
-
