@@ -82,3 +82,4 @@ When you push to `main` or push a release tag `v*.*.*`:
    - Cleans up stale container images (`docker image prune -f`).
 
 If the VPS secrets are not yet added, the pipeline safely falls back to logging an activation guide without failing the CI pipeline.
+
