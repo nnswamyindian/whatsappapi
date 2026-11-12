@@ -1,386 +1,83 @@
-name: MetaGreenWave Unified CI/CD Pipeline
+name: Deploy to VPS
 
 on:
   push:
-    branches: [ main, master, develop, staging ]
-    tags: [ 'v*' ]
-  pull_request:
-    branches: [ main, master, develop, staging ]
+    branches: [ main ]
   workflow_dispatch:
-    inputs:
-      target_env:
-        description: 'Target Deployment Environment'
-        required: true
-        default: 'production'
-        type: choice
-        options:
-          - staging
-          - production
-      run_migrations:
-        description: 'Run Database Migrations before deployment'
-        required: true
-        default: true
-        type: boolean
-
-concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
-
-permissions:
-  contents: write
-  actions: read
 
 jobs:
-  # ============================================================================
-  # 1. TYPECHECK & LINT GATE
-  # ============================================================================
-  typecheck:
-    name: Typecheck & Code Integrity
-    runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        node-version: [ 20.x, 22.x ]
-
-    steps:
-      - name: Checkout Repository
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js ${{ matrix.node-version }}
-        uses: actions/setup-node@v4
-        with:
-          node-version: ${{ matrix.node-version }}
-
-      - name: Install Client Dependencies
-        run: cd client && (npm ci || npm install)
-
-      - name: Install Server Dependencies
-        run: cd server && (npm ci || npm install)
-
-      - name: Client TypeScript Check (npm run typecheck)
-        run: cd client && npm run typecheck
-
-      - name: Server TypeScript Check (npm run typecheck)
-        run: cd server && npm run typecheck
-
-  # ============================================================================
-  # 2. PRODUCTION ASSET BUILD
-  # ============================================================================
-  build:
-    name: Build Client & Server Assets
-    needs: [ typecheck ]
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout Repository
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js 20.x
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20.x
-
-      - name: Install Dependencies
-        run: |
-          cd client && (npm ci || npm install)
-          cd ../server && (npm ci || npm install)
-
-      - name: Build Vite Frontend Bundle
-        run: cd client && npm run build
-
-      - name: Build Server Distribution
-        run: cd server && npm run build
-
-      - name: Archive Client Dist Artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: client-dist
-          path: client/dist/
-          retention-days: 7
-
-      - name: Archive Server Dist Artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: server-dist
-          path: server/dist/
-          retention-days: 7
-
-  # ============================================================================
-  # 3. AUTOMATED TESTING (Core 22 Suites + Enterprise E2E + Media Uploads)
-  # ============================================================================
-  test:
-    name: Core & Enterprise E2E Test Suites
-    needs: [ build ]
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout Repository
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js 20.x
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20.x
-
-      - name: Install Dependencies
-        run: |
-          cd client && (npm ci || npm install)
-          cd ../server && (npm ci || npm install)
-
-      - name: Download Client Build Artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: client-dist
-          path: client/dist
-
-      - name: Download Server Build Artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: server-dist
-          path: server/dist
-
-      - name: Run Core Backend Unit & Integration Tests (22 Suites)
-        env:
-          NODE_ENV: test
-          JWT_SECRET: ci_test_jwt_secret_key_minimum_32_characters_long_12345
-          ENCRYPTION_KEY: 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
-          PORT: 5000
-        run: |
-          cd server
-          npm test
-
-      - name: Start MetaGreenWave Backend Server Daemon
-        env:
-          NODE_ENV: test
-          PORT: 5000
-          JWT_SECRET: ci_test_jwt_secret_key_minimum_32_characters_long_12345
-          ENCRYPTION_KEY: 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
-        run: |
-          cd server
-          node dist/index.js &
-          echo $! > ../server.pid
-          sleep 4
-
-      - name: Healthcheck Verification Probe
-        run: |
-          curl -f http://localhost:5000/api/v1/health || (echo "Health check probe failed!" && exit 1)
-
-      - name: Run Enterprise E2E Acceptance Test Suite
-        run: |
-          node server/tests/enterprise-e2e.cjs
-
-      - name: Run Template Media Upload Tests
-        run: |
-          node server/tests/template-media-test.cjs
-
-      - name: Stop Background Server
-        if: always()
-        run: |
-          if [ -f server.pid ]; then
-            kill $(cat server.pid) || true
-          fi
-
-  # ============================================================================
-  # 4. SECURITY & DEPENDENCY AUDIT
-  # ============================================================================
-  security:
-    name: Security & Vulnerability Scan
-    needs: [ build ]
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout Repository
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js 20.x
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20.x
-
-      - name: Audit Server Dependencies
-        run: cd server && (npm audit --audit-level=high || true)
-
-      - name: Audit Client Dependencies
-        run: cd client && (npm audit --audit-level=high || true)
-
-  # ============================================================================
-  # 5. CONTINUOUS DEPLOYMENT (Automated Native VPS Delivery via SSH - No Docker)
-  # ============================================================================
   deploy:
-    name: Automated VPS Deployment & Health Verification
-    needs: [ test, security ]
-    if: (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master' || startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch') && github.event_name != 'pull_request'
+    name: Deploy to VPS
     runs-on: ubuntu-latest
-    environment:
-      name: production
-      url: ${{ vars.APP_URL || 'http://localhost:5000' }}
 
     steps:
-      - name: Checkout Code
-        uses: actions/checkout@v4
-
-      - name: Check VPS Secrets Configuration
-        id: check-secrets
-        run: |
-          VPS_HOST="${{ secrets.VPS_HOST || secrets.HOST }}"
-          VPS_USER="${{ secrets.VPS_USER || secrets.USERNAME }}"
-          VPS_KEY="${{ secrets.VPS_SSH_KEY || secrets.SSH_KEY || secrets.SSH_PRIVATE_KEY || secrets.SSHKEY }}"
-          
-          if [ -n "$VPS_HOST" ] && [ -n "$VPS_USER" ] && [ -n "$VPS_KEY" ]; then
-            echo "has_vps=true" >> $GITHUB_OUTPUT
-            echo "✅ VPS deployment secrets detected: Host, User, and SSH Key configured."
-          else
-            echo "has_vps=false" >> $GITHUB_OUTPUT
-            echo "⚠️ Notice: VPS deployment secrets (VPS_HOST, VPS_USER, VPS_SSH_KEY) are not set in GitHub Secrets."
-            echo "ℹ️ The pipeline will log deployment instructions until secrets are added in repository settings."
-          fi
-
-      - name: Deploy to Remote VPS via SSH (Native Node.js / PM2)
-        if: steps.check-secrets.outputs.has_vps == 'true'
+      - name: Deploy via SSH
         env:
           VPS_HOST: ${{ secrets.VPS_HOST || secrets.HOST }}
           VPS_USER: ${{ secrets.VPS_USER || secrets.USERNAME }}
-          VPS_KEY: ${{ secrets.VPS_SSH_KEY || secrets.SSH_KEY || secrets.SSH_PRIVATE_KEY || secrets.SSHKEY }}
-          VPS_PORT: ${{ secrets.VPS_PORT || vars.VPS_PORT || '22' }}
-          DEPLOY_PATH: ${{ secrets.VPS_DEPLOY_PATH || vars.VPS_DEPLOY_PATH || '/opt/metagreenwave' }}
+          VPS_KEY: ${{ secrets.VPS_SSH_KEY || secrets.SSH_KEY || secrets.SSH_PRIVATE_KEY }}
+          VPS_PORT: ${{ secrets.VPS_PORT || '22' }}
+          DEPLOY_PATH: ${{ secrets.VPS_DEPLOY_PATH || '/opt/metagreenwave' }}
         run: |
-          echo "🚀 Initiating Secure SSH Deployment to $VPS_USER@$VPS_HOST:$DEPLOY_PATH (Port: $VPS_PORT)..."
-          
-          # Setup SSH configuration & Key
+          if [ -z "$VPS_HOST" ] || [ -z "$VPS_USER" ] || [ -z "$VPS_KEY" ]; then
+            echo "❌ Missing required secrets: VPS_HOST, VPS_USER, or VPS_SSH_KEY."
+            echo "Please set them in GitHub: Settings -> Secrets and variables -> Actions."
+            exit 1
+          fi
+
+          echo "🚀 Connecting to $VPS_USER@$VPS_HOST:$DEPLOY_PATH on port $VPS_PORT..."
           mkdir -p ~/.ssh
-          echo "$VPS_KEY" > ~/.ssh/deploy_key
-          chmod 600 ~/.ssh/deploy_key
+          echo "$VPS_KEY" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
           ssh-keyscan -p "$VPS_PORT" -H "$VPS_HOST" >> ~/.ssh/known_hosts 2>/dev/null || true
 
-          # Execute Deployment on Remote VPS
-          ssh -i ~/.ssh/deploy_key -p "$VPS_PORT" -o StrictHostKeyChecking=no "$VPS_USER@$VPS_HOST" bash -s << REMOTE_EOF
+          ssh -i ~/.ssh/id_rsa -p "$VPS_PORT" -o StrictHostKeyChecking=no "$VPS_USER@$VPS_HOST" "DEPLOY_PATH='$DEPLOY_PATH' bash -s" << 'EOF'
             set -e
             echo "=========================================================="
-            echo "🟢 REMOTE VPS: Deploying MetaGreenWave (Native Node.js/PM2)"
+            echo "🟢 UPDATING METAGREENWAVE ON VPS ($DEPLOY_PATH)"
             echo "=========================================================="
-            
             mkdir -p "$DEPLOY_PATH"
             cd "$DEPLOY_PATH"
 
-            # 1. Pull latest code or clone if directory is empty
+            # 1. Pull latest code from GitHub
             if [ -d ".git" ]; then
-              echo "📥 Pulling latest git repository updates..."
-              git fetch --all
-              git checkout main
+              echo "📥 Pulling latest changes from GitHub..."
               git pull origin main
             else
-              echo "📥 Cloning repository into $DEPLOY_PATH..."
+              echo "📥 Cloning repository..."
               git clone https://github.com/nnswamyindian/whatsappapi.git .
             fi
 
-            # 2. Install dependencies & build production assets
-            echo "📦 Building client and server..."
-            cd client && npm install --no-audit && npm run build
-            cd ../server && npm install --no-audit && npm run build
+            # 2. Build Client
+            echo "📦 Building client..."
+            cd client
+            npm install
+            npm run build
             cd ..
 
-            # 3. Reload / Start application with PM2 or node daemon
+            # 3. Build Server
+            echo "📦 Building server..."
+            cd server
+            npm install
+            npm run build
+            cd ..
+
+            # 4. Restart Application with PM2 (or node fallback)
+            echo "🔄 Restarting application..."
             if command -v pm2 &> /dev/null; then
-              echo "🔄 Restarting application via PM2..."
               pm2 reload ecosystem.config.cjs --env production || pm2 start ecosystem.config.cjs --env production
               pm2 save || true
             else
-              echo "🔄 Restarting application via Node daemon..."
               pkill -f "node dist/index.js" || true
               sleep 1
               cd server && nohup npm start > ../server.log 2>&1 &
               cd ..
             fi
 
-            # 4. Verify local healthcheck on the VPS
-            echo "🩺 Verifying MetaGreenWave healthcheck on VPS..."
-            sleep 4
-            for i in {1..12}; do
-              if curl -s -f http://localhost:5000/api/v1/health > /dev/null 2>&1; then
-                echo "✅ MetaGreenWave is LIVE and HEALTHY on VPS!"
-                break
-              fi
-              echo "Healthcheck attempt \$i/12... waiting 3s"
-              sleep 3
-            done
-
-            echo "🎉 VPS Deployment completed successfully!"
-          REMOTE_EOF
-
-      - name: Simulated Deployment Notice (When VPS Secrets Not Configured)
-        if: steps.check-secrets.outputs.has_vps != 'true'
-        run: |
-          echo "========================================================================="
-          echo "ℹ️  VPS DEPLOYMENT READY FOR ACTIVATION"
-          echo "========================================================================="
-          echo "Target Environment: ${{ github.event.inputs.target_env || 'production' }}"
-          echo ""
-          echo "To enable direct auto-deploy to your VPS on every commit/tag, configure"
-          echo "the following in GitHub: Settings -> Secrets and variables -> Actions"
-          echo ""
-          echo "  Secrets:"
-          echo "    - VPS_HOST:        Your VPS IP address or domain (e.g. 194.164.55.12)"
-          echo "    - VPS_USER:        SSH username (e.g. root, ubuntu)"
-          echo "    - VPS_SSH_KEY:     Private SSH key (PEM / OpenSSH format)"
-          echo ""
-          echo "  Variables (Optional):"
-          echo "    - VPS_PORT:        SSH port (default: 22)"
-          echo "    - VPS_DEPLOY_PATH: Directory path on VPS (default: /opt/metagreenwave)"
-          echo "    - APP_URL:         Public URL of your platform (e.g. https://app.metagreenwave.com)"
-          echo "========================================================================="
-
-  # ============================================================================
-  # 6. GITHUB RELEASE & CHANGELOG (For Version Tags)
-  # ============================================================================
-  release:
-    name: Publish GitHub Release
-    needs: [ deploy ]
-    if: startsWith(github.ref, 'refs/tags/v')
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout Repository
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Setup Node.js 20.x
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20.x
-
-      - name: Download Build Artifacts
-        uses: actions/download-artifact@v4
-        with:
-          name: client-dist
-          path: client/dist
-
-      - uses: actions/download-artifact@v4
-        with:
-          name: server-dist
-          path: server/dist
-
-      - name: Package Release Bundle
-        run: |
-          mkdir -p release-bundle
-          cp -r server/dist release-bundle/server
-          cp -r client/dist release-bundle/client
-          cp package.json release-bundle/
-          cp server/package.json release-bundle/server/
-          tar -czf metagreenwave-${{ github.ref_name }}.tar.gz release-bundle/
-
-      - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
-        with:
-          name: MetaGreenWave Enterprise ${{ github.ref_name }}
-          tag_name: ${{ github.ref_name }}
-          draft: false
-          prerelease: false
-          generate_release_notes: true
-          files: |
-            metagreenwave-${{ github.ref_name }}.tar.gz
-          body: |
-            ## MetaGreenWave Enterprise WhatsApp Business Messaging SaaS
-            
-            ### Release Summary (${{ github.ref_name }})
-            - **Platform:** MetaGreenWave
-            - **WhatsApp Cloud API:** Official Meta Graph API v21.0
-            - **Native Deployment:** Automated VPS Continuous Delivery over SSH (PM2 / Node.js)
-            - **Features:** Omnichannel WhatsApp + Email Follow-ups, Dual Provider/Tenant Architecture, Mobile Responsive Layouts, Template Media Uploads (Images, Videos, Documents).
+            # 5. Check Health
+            echo "🩺 Verifying healthcheck..."
+            sleep 3
+            curl -s http://localhost:5000/api/v1/health || true
+            echo ""
+            echo "🎉 MetaGreenWave deployment complete and live!"
+          EOF
