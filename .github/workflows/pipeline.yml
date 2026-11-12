@@ -2,68 +2,67 @@ name: Deploy to VPS
 
 on:
   push:
-    branches: [ main ]
+    branches:
+      - main  # your default branch
   workflow_dispatch:
 
 jobs:
-  deploy:
-    name: Deploy to VPS
+  build-and-deploy:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Deploy via SSH
-        env:
-          VPS_HOST: ${{ secrets.VPS_HOST || secrets.HOST }}
-          VPS_USER: ${{ secrets.VPS_USER || secrets.USERNAME }}
-          VPS_KEY: ${{ secrets.VPS_SSH_KEY || secrets.SSH_KEY || secrets.SSH_PRIVATE_KEY }}
-          VPS_PORT: ${{ secrets.VPS_PORT || '22' }}
-          DEPLOY_PATH: ${{ secrets.VPS_DEPLOY_PATH || '/opt/metagreenwave' }}
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install Dependencies
         run: |
-          if [ -z "$VPS_HOST" ] || [ -z "$VPS_USER" ] || [ -z "$VPS_KEY" ]; then
-            echo "❌ Missing required secrets: VPS_HOST, VPS_USER, or VPS_SSH_KEY."
-            echo "Please set them in GitHub: Settings -> Secrets and variables -> Actions."
-            exit 1
-          fi
+          npm install
+          cd client && npm install
+          cd ../server && npm install
 
-          echo "🚀 Connecting to $VPS_USER@$VPS_HOST:$DEPLOY_PATH on port $VPS_PORT..."
-          mkdir -p ~/.ssh
-          echo "$VPS_KEY" > ~/.ssh/id_rsa
-          chmod 600 ~/.ssh/id_rsa
-          ssh-keyscan -p "$VPS_PORT" -H "$VPS_HOST" >> ~/.ssh/known_hosts 2>/dev/null || true
+      - name: Build Project
+        run: npm run build
 
-          ssh -i ~/.ssh/id_rsa -p "$VPS_PORT" -o StrictHostKeyChecking=no "$VPS_USER@$VPS_HOST" "DEPLOY_PATH='$DEPLOY_PATH' bash -s" << 'EOF'
+      - name: Deploy to VPS via SSH
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          port: ${{ secrets.VPS_PORT || 22 }}
+          script: |
             set -e
+            DEPLOY_PATH="${{ secrets.VPS_DEPLOY_PATH || '/var/www/metagreenwave' }}"
             echo "=========================================================="
-            echo "🟢 UPDATING METAGREENWAVE ON VPS ($DEPLOY_PATH)"
+            echo "🚀 Updating MetaGreenWave on VPS ($DEPLOY_PATH)..."
             echo "=========================================================="
             mkdir -p "$DEPLOY_PATH"
             cd "$DEPLOY_PATH"
 
             # 1. Pull latest code from GitHub
             if [ -d ".git" ]; then
-              echo "📥 Pulling latest changes from GitHub..."
+              echo "📥 Pulling latest git updates..."
+              git fetch --all
+              git checkout main
               git pull origin main
             else
               echo "📥 Cloning repository..."
               git clone https://github.com/nnswamyindian/whatsappapi.git .
             fi
 
-            # 2. Build Client
-            echo "📦 Building client..."
-            cd client
-            npm install
-            npm run build
+            # 2. Install dependencies & build on VPS
+            echo "📦 Building client and server..."
+            cd client && npm install && npm run build
+            cd ../server && npm install && npm run build
             cd ..
 
-            # 3. Build Server
-            echo "📦 Building server..."
-            cd server
-            npm install
-            npm run build
-            cd ..
-
-            # 4. Restart Application with PM2 (or node fallback)
-            echo "🔄 Restarting application..."
+            # 3. Reload application via PM2 or Node
+            echo "🔄 Restarting application process..."
             if command -v pm2 &> /dev/null; then
               pm2 reload ecosystem.config.cjs --env production || pm2 start ecosystem.config.cjs --env production
               pm2 save || true
@@ -74,10 +73,24 @@ jobs:
               cd ..
             fi
 
-            # 5. Check Health
-            echo "🩺 Verifying healthcheck..."
+            # 4. Verify local application health
             sleep 3
             curl -s http://localhost:5000/api/v1/health || true
             echo ""
-            echo "🎉 MetaGreenWave deployment complete and live!"
-          EOF
+            echo "🎉 MetaGreenWave application updated and running!"
+
+      - name: Restart Nginx
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          port: ${{ secrets.VPS_PORT || 22 }}
+          script: |
+            if command -v systemctl &> /dev/null && systemctl is-active --quiet nginx; then
+              echo "🔄 Restarting Nginx reverse proxy..."
+              sudo systemctl restart nginx
+              echo "✅ Nginx restarted successfully."
+            else
+              echo "ℹ️ Nginx service not active or not installed, skipping."
+            fi
