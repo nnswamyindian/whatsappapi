@@ -1,7 +1,7 @@
 import { test, describe, before } from 'node:test';
 import assert from 'node:assert/strict';
 import { normalizePhone } from '../dist/utils/phone.js';
-import { db, seedDatabase } from '../dist/db/index.js';
+import { db, seedDatabase, initDatabaseConnections } from '../dist/db/index.js';
 import { mySqlEngine } from '../dist/db/mysql-pool.js';
 import { MockWhatsAppProvider } from '../dist/providers/whatsapp/mock-provider.js';
 import { encryptSecret, decryptSecret, maskSecret } from '../dist/utils/crypto.js';
@@ -12,8 +12,8 @@ import bcrypt from 'bcryptjs';
 import { v4 as uuidv4 } from 'uuid';
 
 describe('GreenWave Backend Core Verification', () => {
-  before(() => {
-    seedDatabase();
+  before(async () => {
+    await initDatabaseConnections();
   });
 
   test('1. Database initializes and seeds demo workspace and rate cards', () => {
@@ -492,15 +492,15 @@ describe('GreenWave Backend Core Verification', () => {
     assert.ok(plans.length >= 3, 'Default subscription plans must exist');
 
     const starter = plans.find((p) => p.slug === 'starter');
-    assert.equal(starter.monthly_price_usd, 29.00);
+    assert.equal(Number(starter.monthly_price_usd), 29.00);
     assert.equal(starter.contact_limit, 1000);
 
     const growth = plans.find((p) => p.slug === 'growth');
-    assert.equal(growth.monthly_price_usd, 79.00);
+    assert.equal(Number(growth.monthly_price_usd), 79.00);
     assert.equal(growth.contact_limit, 10000);
 
     const enterprise = plans.find((p) => p.slug === 'enterprise');
-    assert.equal(enterprise.monthly_price_usd, 199.00);
+    assert.equal(Number(enterprise.monthly_price_usd), 199.00);
     assert.equal(enterprise.contact_limit, 100000);
   });
 
@@ -518,7 +518,7 @@ describe('GreenWave Backend Core Verification', () => {
 
     // 3. Test Database Health Telemetry
     const health = await db.getHealth();
-    assert.ok(health.engine === 'sqlite' || health.engine === 'mysql', 'Engine must report valid SQL type');
+    assert.equal(health.engine, 'mysql', 'Engine must report pure MySQL');
     assert.equal(health.connected, true, 'Database must report connected state');
 
     // 4. Test Unified Async Query Execution

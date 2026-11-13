@@ -174,17 +174,11 @@ app.use((err: any, req: Request, res: Response, next: NextFunction) => {
   });
 });
 
-// Initialize database and start listening
-try {
-  seedDatabase();
-  console.log('✅ SQLite base schema verified & seeded successfully.');
-} catch (err: any) {
-  console.error('❌ Database initialization error:', err.message);
-}
-
-// Asynchronously initialize MySQL pool if configured
-initDatabaseConnections().catch((err) => {
-  console.warn('[Database Engine] Async database initialization warning:', err.message);
+// Initialize Enterprise MySQL database connections and schema
+initDatabaseConnections().then(() => {
+  console.log('✅ MySQL database engine ready & operational.');
+}).catch((err) => {
+  console.error('❌ [Database Engine] MySQL connection error:', err.message);
 });
 
 // Omnichannel Automated Lifecycle Background Engine (Periodic check every 12h)

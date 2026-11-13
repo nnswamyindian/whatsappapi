@@ -181,7 +181,12 @@ export class MySQLDatabaseEngine {
   public translateSql(sql: string): string {
     let converted = sql;
 
-    // 1. Normalize SQLite `ON CONFLICT (...) DO UPDATE SET ...` to MySQL `ON DUPLICATE KEY UPDATE ...`
+    // 1. Normalize SQLite `INSERT OR REPLACE INTO` to MySQL `REPLACE INTO`
+    if (converted.includes('INSERT OR REPLACE INTO')) {
+      converted = converted.replace(/INSERT\s+OR\s+REPLACE\s+INTO/gi, 'REPLACE INTO');
+    }
+
+    // 2. Normalize SQLite `ON CONFLICT (...) DO UPDATE SET ...` to MySQL `ON DUPLICATE KEY UPDATE ...`
     if (converted.includes('ON CONFLICT')) {
       converted = converted.replace(
         /ON\s+CONFLICT\s*\([^)]*\)\s*DO\s+UPDATE\s+SET/gi,
@@ -191,7 +196,7 @@ export class MySQLDatabaseEngine {
       converted = converted.replace(/excluded\.([a-zA-Z0-9_]+)/gi, 'VALUES($1)');
     }
 
-    // 2. Normalize SQLite string concatenation `||` to CONCAT
+    // 3. Normalize SQLite string concatenation `||` to CONCAT
     // If standard pattern: `? LIKE '%' || trigger_keyword || '%'` -> `? LIKE CONCAT('%', trigger_keyword, '%')`
     if (converted.includes("||")) {
       converted = converted.replace(/([^\s]+)\s*\|\|\s*([^\s]+)\s*\|\|\s*([^\s]+)/g, 'CONCAT($1, $2, $3)');

@@ -105,7 +105,7 @@ router.post('/checkout', requireRole(['owner', 'admin', 'billing_manager']), asy
         renewal.setDate(renewal.getDate() + 30);
     }
     const renewalDate = renewal.toISOString();
-    const amount = billingCycle === 'yearly' ? plan.yearly_price_usd : plan.monthly_price_usd;
+    const amount = Number(billingCycle === 'yearly' ? plan.yearly_price_usd : plan.monthly_price_usd);
     const invoiceNumber = `INV-${now.getFullYear()}-${Math.floor(10000 + Math.random() * 90000)}`;
     const invoiceId = uuidv4();
     const subscriptionId = `sub_${uuidv4().substring(0, 8)}`;

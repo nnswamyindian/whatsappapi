@@ -37,8 +37,8 @@ export const ENV = {
   ENABLE_DEMO_MODE: process.env.ENABLE_DEMO_MODE !== 'false',
   IS_SANDBOX: !process.env.META_ACCESS_TOKEN,
 
-  // Relational Database Configuration (MySQL / Cloud / Local)
-  DB_TYPE: (process.env.DB_TYPE || (process.env.DATABASE_URL ? 'mysql' : 'sqlite')) as 'mysql' | 'sqlite',
+  // Relational Database Configuration (MySQL / MariaDB / Cloud Relational Database)
+  DB_TYPE: (process.env.DB_TYPE || 'mysql') as 'mysql',
   DATABASE_URL: process.env.DATABASE_URL || '',
   DB_HOST: process.env.DB_HOST || 'localhost',
   DB_PORT: parseInt(process.env.DB_PORT || '3306', 10),

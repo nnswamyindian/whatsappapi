@@ -1,317 +1,127 @@
-import { DatabaseSync } from 'node:sqlite';
-import path from 'node:path';
-import fs from 'node:fs';
-import { fileURLToPath } from 'node:url';
-import { SCHEMA_SQL } from './schema.js';
+import { MYSQL_SCHEMA_STATEMENTS } from './mysql-schema.js';
 import { mySqlEngine } from './mysql-pool.js';
+import { mySqlSyncBridge } from './mysql-bridge.js';
 import { ENV } from '../config/env.js';
 import bcrypt from 'bcryptjs';
 import { v4 as uuidv4 } from 'uuid';
 import { seedSubscriptionPlans, seedEmailTemplates } from './seeds.js';
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-const DATA_DIR = path.resolve(__dirname, '../../data');
-if (!fs.existsSync(DATA_DIR)) {
-    fs.mkdirSync(DATA_DIR, { recursive: true });
-}
-const DB_PATH = path.join(DATA_DIR, 'greenwave.db');
-const dbInstance = new DatabaseSync(DB_PATH);
-// Initialize schema
-dbInstance.exec(SCHEMA_SQL);
-// Safe idempotent column migrations for existing databases
-try {
-    dbInstance.exec(`ALTER TABLE templates ADD COLUMN is_carousel INTEGER NOT NULL DEFAULT 0;`);
-}
-catch (e) { }
-try {
-    dbInstance.exec(`ALTER TABLE templates ADD COLUMN cards_json TEXT DEFAULT '[]';`);
-}
-catch (e) { }
-try {
-    dbInstance.exec(`ALTER TABLE messages ADD COLUMN error_code TEXT;`);
-}
-catch (e) { }
-try {
-    dbInstance.exec(`ALTER TABLE messages ADD COLUMN error_message TEXT;`);
-}
-catch (e) { }
-try {
-    dbInstance.exec(`ALTER TABLE contact_imports ADD COLUMN preset_name TEXT;`);
-}
-catch (e) { }
-// CRM, Conversation Control, and Reply Classification migrations
-try {
-    dbInstance.exec(`ALTER TABLE contacts ADD COLUMN pipeline_stage_id TEXT;`);
-}
-catch (e) { }
-try {
-    dbInstance.exec(`ALTER TABLE contacts ADD COLUMN lead_value REAL DEFAULT 0.0;`);
-}
-catch (e) { }
-try {
-    dbInstance.exec(`ALTER TABLE contacts ADD COLUMN assigned_agent_id TEXT;`);
-}
-catch (e) { }
-try {
-    dbInstance.exec(`ALTER TABLE contacts ADD COLUMN assigned_agent_name TEXT;`);
-}
-catch (e) { }
-try {
-    dbInstance.exec(`ALTER TABLE contacts ADD COLUMN lead_source TEXT DEFAULT 'whatsapp';`);
-}
-catch (e) { }
-try {
-    dbInstance.exec(`ALTER TABLE contacts ADD COLUMN campaign_id TEXT;`);
-}
-catch (e) { }
-try {
-    dbInstance.exec(`ALTER TABLE conversations ADD COLUMN control_mode TEXT NOT NULL DEFAULT 'bot_active';`);
-}
-catch (e) { }
-try {
-    dbInstance.exec(`ALTER TABLE conversations ADD COLUMN assigned_team TEXT;`);
-}
-catch (e) { }
-try {
-    dbInstance.exec(`ALTER TABLE memberships ADD COLUMN permissions_json TEXT DEFAULT '[]';`);
-}
-catch (e) { }
-try {
-    dbInstance.exec(`ALTER TABLE messages ADD COLUMN classified_category TEXT;`);
-}
-catch (e) { }
-try {
-    dbInstance.exec(`ALTER TABLE messages ADD COLUMN classified_intent TEXT;`);
-}
-catch (e) { }
-try {
-    dbInstance.exec(`ALTER TABLE messages ADD COLUMN classification_confidence REAL;`);
-}
-catch (e) { }
-try {
-    dbInstance.exec(`ALTER TABLE automations ADD COLUMN draft_nodes_json TEXT DEFAULT '[]';`);
-}
-catch (e) { }
-try {
-    dbInstance.exec(`ALTER TABLE automations ADD COLUMN draft_edges_json TEXT DEFAULT '[]';`);
-}
-catch (e) { }
-try {
-    dbInstance.exec(`ALTER TABLE automations ADD COLUMN published_nodes_json TEXT DEFAULT '[]';`);
-}
-catch (e) { }
-try {
-    dbInstance.exec(`ALTER TABLE automations ADD COLUMN published_edges_json TEXT DEFAULT '[]';`);
-}
-catch (e) { }
-try {
-    dbInstance.exec(`ALTER TABLE automations ADD COLUMN version INTEGER DEFAULT 1;`);
-}
-catch (e) { }
-// Multi-tenant Approval, Business Profile & Security migrations
-try {
-    dbInstance.exec(`ALTER TABLE organizations ADD COLUMN approval_status TEXT NOT NULL DEFAULT 'APPROVED';`);
-}
-catch (e) { }
-try {
-    dbInstance.exec(`ALTER TABLE organizations ADD COLUMN business_category TEXT;`);
-}
-catch (e) { }
-try {
-    dbInstance.exec(`ALTER TABLE organizations ADD COLUMN country TEXT;`);
-}
-catch (e) { }
-try {
-    dbInstance.exec(`ALTER TABLE organizations ADD COLUMN website TEXT;`);
-}
-catch (e) { }
-try {
-    dbInstance.exec(`ALTER TABLE organizations ADD COLUMN business_address TEXT;`);
-}
-catch (e) { }
-try {
-    dbInstance.exec(`ALTER TABLE organizations ADD COLUMN intended_usage TEXT;`);
-}
-catch (e) { }
-try {
-    dbInstance.exec(`ALTER TABLE organizations ADD COLUMN phone_e164 TEXT;`);
-}
-catch (e) { }
-try {
-    dbInstance.exec(`ALTER TABLE organizations ADD COLUMN rejection_reason TEXT;`);
-}
-catch (e) { }
-try {
-    dbInstance.exec(`ALTER TABLE organizations ADD COLUMN info_requested_details TEXT;`);
-}
-catch (e) { }
-try {
-    dbInstance.exec(`ALTER TABLE organizations ADD COLUMN info_submitted_details TEXT;`);
-}
-catch (e) { }
-try {
-    dbInstance.exec(`ALTER TABLE organizations ADD COLUMN admin_notes TEXT;`);
-}
-catch (e) { }
-try {
-    dbInstance.exec(`ALTER TABLE organizations ADD COLUMN reviewed_by TEXT;`);
-}
-catch (e) { }
-try {
-    dbInstance.exec(`ALTER TABLE organizations ADD COLUMN reviewed_at TEXT;`);
-}
-catch (e) { }
-try {
-    dbInstance.exec(`ALTER TABLE organizations ADD COLUMN contact_limit INTEGER DEFAULT 1000;`);
-}
-catch (e) { }
-try {
-    dbInstance.exec(`ALTER TABLE organizations ADD COLUMN team_limit INTEGER DEFAULT 3;`);
-}
-catch (e) { }
-try {
-    dbInstance.exec(`ALTER TABLE organizations ADD COLUMN campaign_limit INTEGER DEFAULT 50;`);
-}
-catch (e) { }
-// Users Email Verification & Password Recovery migrations
-try {
-    dbInstance.exec(`ALTER TABLE users ADD COLUMN email_verified INTEGER NOT NULL DEFAULT 1;`);
-}
-catch (e) { }
-try {
-    dbInstance.exec(`ALTER TABLE users ADD COLUMN email_verification_token TEXT;`);
-}
-catch (e) { }
-try {
-    dbInstance.exec(`ALTER TABLE users ADD COLUMN reset_password_token TEXT;`);
-}
-catch (e) { }
-try {
-    dbInstance.exec(`ALTER TABLE users ADD COLUMN reset_password_expires_at TEXT;`);
-}
-catch (e) { }
-try {
-    dbInstance.exec(`
-    CREATE TABLE IF NOT EXISTS lifecycle_dispatches (
-      id TEXT PRIMARY KEY,
-      organization_id TEXT NOT NULL,
-      recipient_phone TEXT,
-      recipient_email TEXT,
-      channel TEXT NOT NULL,
-      event_type TEXT NOT NULL,
-      title TEXT NOT NULL,
-      message_preview TEXT NOT NULL,
-      metadata_json TEXT DEFAULT '{}',
-      status TEXT NOT NULL DEFAULT 'delivered',
-      dispatched_at TEXT NOT NULL
-    );
-  `);
-}
-catch (e) { }
 export const db = {
-    raw: dbInstance,
     mysql: mySqlEngine,
+    bridge: mySqlSyncBridge,
     isMySQL() {
-        return mySqlEngine.isConnected();
+        return true;
     },
     async getHealth() {
-        if (mySqlEngine.isConnected()) {
-            const mysqlHealth = await mySqlEngine.healthCheck();
-            return {
-                engine: 'mysql',
-                connected: mysqlHealth.connected,
-                latencyMs: mysqlHealth.latencyMs,
-                details: mysqlHealth,
-            };
-        }
+        const mysqlHealth = await mySqlEngine.healthCheck();
         return {
-            engine: 'sqlite',
-            connected: true,
-            latencyMs: 0,
-            details: {
-                mode: 'WAL',
-                dbFile: DB_PATH,
-                foreignKeys: true,
-            },
+            engine: 'mysql',
+            connected: mysqlHealth.connected,
+            latencyMs: mysqlHealth.latencyMs,
+            details: mysqlHealth,
         };
     },
     query(sql, params = []) {
-        const sanitized = params.map(p => (p === undefined ? null : p));
-        const stmt = dbInstance.prepare(sql);
-        return stmt.all(...sanitized);
+        return mySqlSyncBridge.querySync(sql, params);
     },
     queryOne(sql, params = []) {
-        const results = this.query(sql, params);
-        return results.length > 0 ? results[0] : null;
+        return mySqlSyncBridge.queryOneSync(sql, params);
     },
     execute(sql, params = []) {
-        const sanitized = params.map(p => (p === undefined ? null : p));
-        const stmt = dbInstance.prepare(sql);
-        const result = stmt.run(...sanitized);
-        return {
-            changes: result.changes,
-            lastInsertRowid: result.lastInsertRowid,
-        };
+        return mySqlSyncBridge.executeSync(sql, params);
     },
     transaction(fn) {
-        dbInstance.exec('BEGIN IMMEDIATE');
-        try {
-            const res = fn();
-            dbInstance.exec('COMMIT');
-            return res;
-        }
-        catch (err) {
-            dbInstance.exec('ROLLBACK');
-            throw err;
-        }
+        return mySqlSyncBridge.transactionSync(fn);
     },
-    // Asynchronous Methods (Running against MySQL Pool when active, or SQLite)
+    // Asynchronous Methods (Directly to MySQL Pool)
     async queryAsync(sql, params = []) {
-        if (mySqlEngine.isConnected()) {
-            return mySqlEngine.query(sql, params);
-        }
-        return this.query(sql, params);
+        return mySqlEngine.query(sql, params);
     },
     async queryOneAsync(sql, params = []) {
-        if (mySqlEngine.isConnected()) {
-            return mySqlEngine.queryOne(sql, params);
-        }
-        return this.queryOne(sql, params);
+        return mySqlEngine.queryOne(sql, params);
     },
     async executeAsync(sql, params = []) {
-        if (mySqlEngine.isConnected()) {
-            return mySqlEngine.execute(sql, params);
-        }
-        const res = this.execute(sql, params);
-        return {
-            changes: Number(res.changes),
-            lastInsertRowid: Number(res.lastInsertRowid || 0),
-        };
+        return mySqlEngine.execute(sql, params);
     },
     async transactionAsync(fn) {
-        if (mySqlEngine.isConnected()) {
-            return mySqlEngine.withTransaction(fn);
-        }
-        return this.transaction(() => fn());
+        return mySqlEngine.withTransaction(fn);
     },
 };
 /**
- * Asynchronously initialize database connections (MySQL if configured)
+ * Ensure all required MySQL tables and schema definitions exist
  */
-export async function initDatabaseConnections() {
-    const shouldConnectMySQL = ENV.DB_TYPE === 'mysql' || Boolean(ENV.DATABASE_URL);
-    if (shouldConnectMySQL) {
-        const connected = await mySqlEngine.initialize();
-        if (connected) {
-            console.log(`✅ [Database Engine] Enterprise MySQL connection pool active (${ENV.DB_NAME || 'database'}).`);
+async function ensureMySQLSchema() {
+    // 1. Create all 42 tables
+    for (const statement of MYSQL_SCHEMA_STATEMENTS) {
+        try {
+            await mySqlEngine.execute(statement);
         }
-        else {
-            console.warn('ℹ️ [Database Engine] MySQL not reachable on startup. Running on high-performance SQLite WAL mode.');
-            console.warn('👉 To connect MySQL: Ensure MySQL is running on port 3306 or run: docker compose up -d');
+        catch (err) {
+            console.warn(`[MySQL Schema Warning] ${err.message}`);
         }
     }
+    // 2. Safe idempotent column migrations for existing databases
+    const columnMigrations = [
+        { table: 'organizations', column: 'website', type: 'VARCHAR(255)' },
+        { table: 'organizations', column: 'business_address', type: 'TEXT' },
+        { table: 'organizations', column: 'intended_usage', type: 'TEXT' },
+        { table: 'organizations', column: 'admin_notes', type: 'TEXT' },
+        { table: 'organizations', column: 'info_submitted_details', type: 'TEXT' },
+        { table: 'organizations', column: 'business_category', type: 'VARCHAR(128)' },
+        { table: 'organizations', column: 'country', type: 'VARCHAR(8)' },
+        { table: 'organizations', column: 'phone_e164', type: 'VARCHAR(32)' },
+        { table: 'organizations', column: 'contact_limit', type: 'INT NOT NULL DEFAULT 1000' },
+        { table: 'organizations', column: 'team_limit', type: 'INT NOT NULL DEFAULT 3' },
+        { table: 'organizations', column: 'campaign_limit', type: 'INT NOT NULL DEFAULT 50' },
+        { table: 'memberships', column: 'permissions_json', type: 'JSON' },
+        { table: 'messages', column: 'error_code', type: 'VARCHAR(64)' },
+        { table: 'messages', column: 'error_message', type: 'TEXT' },
+        { table: 'messages', column: 'classified_category', type: 'VARCHAR(64)' },
+        { table: 'messages', column: 'classified_intent', type: 'VARCHAR(64)' },
+        { table: 'messages', column: 'classification_confidence', type: 'DECIMAL(6, 4)' },
+        { table: 'conversations', column: 'control_mode', type: "VARCHAR(32) NOT NULL DEFAULT 'bot_active'" },
+        { table: 'conversations', column: 'assigned_team', type: 'VARCHAR(128)' },
+        { table: 'automations', column: 'draft_nodes_json', type: 'JSON' },
+        { table: 'automations', column: 'draft_edges_json', type: 'JSON' },
+        { table: 'automations', column: 'published_nodes_json', type: 'JSON' },
+        { table: 'automations', column: 'published_edges_json', type: 'JSON' },
+        { table: 'automations', column: 'version', type: 'INT DEFAULT 1' },
+        { table: 'contacts', column: 'pipeline_stage_id', type: 'VARCHAR(64)' },
+        { table: 'contacts', column: 'lead_value', type: 'DECIMAL(12, 2) DEFAULT 0.00' },
+        { table: 'contacts', column: 'assigned_agent_id', type: 'VARCHAR(64)' },
+        { table: 'contacts', column: 'assigned_agent_name', type: 'VARCHAR(255)' },
+        { table: 'contacts', column: 'lead_source', type: "VARCHAR(64) DEFAULT 'whatsapp'" },
+        { table: 'contacts', column: 'campaign_id', type: 'VARCHAR(64)' },
+        { table: 'templates', column: 'is_carousel', type: 'TINYINT(1) NOT NULL DEFAULT 0' },
+        { table: 'templates', column: 'cards_json', type: 'JSON' },
+        { table: 'contact_imports', column: 'preset_name', type: 'VARCHAR(128)' },
+        { table: 'users', column: 'email_verified', type: 'TINYINT(1) NOT NULL DEFAULT 1' },
+        { table: 'users', column: 'email_verification_token', type: 'VARCHAR(255)' },
+        { table: 'users', column: 'reset_password_token', type: 'VARCHAR(255)' },
+        { table: 'users', column: 'reset_password_expires_at', type: 'VARCHAR(64)' },
+    ];
+    for (const m of columnMigrations) {
+        try {
+            const check = await mySqlEngine.query(`SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ? AND COLUMN_NAME = ?`, [ENV.DB_NAME || 'greenwave_db', m.table, m.column]);
+            if (check.length === 0) {
+                await mySqlEngine.execute(`ALTER TABLE \`${m.table}\` ADD COLUMN \`${m.column}\` ${m.type}`);
+            }
+        }
+        catch (_) { }
+    }
+}
+/**
+ * Initialize Enterprise MySQL connection pool and ensure schemas and seeds are active
+ */
+export async function initDatabaseConnections() {
+    const connected = await mySqlEngine.initialize();
+    if (connected) {
+        console.log(`✅ [Database Engine] Enterprise MySQL connection pool active (${ENV.DB_NAME || 'database'}).`);
+        await ensureMySQLSchema();
+        seedDatabase();
+        console.log(`✅ [Database Engine] MySQL schema verified & seeded successfully.`);
+    }
     else {
-        console.log('ℹ️ [Database Engine] SQLite WAL mode active. To switch to MySQL, set DB_TYPE=mysql or DATABASE_URL in .env');
+        throw new Error(`❌ [Database Engine] Failed to connect to MySQL on ${ENV.DB_HOST}:${ENV.DB_PORT}. Ensure MySQL is running on port 3306.`);
     }
 }
 // Seed initial system data (Rate cards, default platform admin, demo workspace)

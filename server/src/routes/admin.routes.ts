@@ -560,7 +560,7 @@ router.get('/subscriptions', (req: Request, res: Response) => {
   subscriptions.forEach(sub => {
     if (sub.status === 'active' || (!sub.status && sub.current_tier !== 'starter')) {
       activePaidCount++;
-      const monthlyPrice = sub.monthly_price_usd || (sub.current_tier === 'growth' ? 79 : sub.current_tier === 'enterprise' ? 199 : 29);
+      const monthlyPrice = Number(sub.monthly_price_usd || (sub.current_tier === 'growth' ? 79 : sub.current_tier === 'enterprise' ? 199 : 29));
       mrr += monthlyPrice;
     }
   });

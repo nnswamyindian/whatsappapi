@@ -262,8 +262,9 @@ export class ClientLifecycleService {
             day: 'numeric',
             year: 'numeric',
         });
+        const formattedAmount = Number(org.amount).toFixed(2);
         const waText = `💳 *Payment Receipt & Subscription Active!*\n\n` +
-            `Dear ${org.owner_name}, thank you for your payment of *US$ ${org.amount.toFixed(2)}* for the *${org.plan_name}* on *MetaGreenWave*.\n\n` +
+            `Dear ${org.owner_name}, thank you for your payment of *US$ ${formattedAmount}* for the *${org.plan_name}* on *MetaGreenWave*.\n\n` +
             `📄 *Invoice #:* ${org.invoice_number}\n` +
             `📅 *Next Renewal Date:* ${formattedDate}\n` +
             `✨ *Plan Status:* ACTIVE & UNRESTRICTED\n\n` +
@@ -272,7 +273,7 @@ export class ClientLifecycleService {
       <div style="font-family: sans-serif; max-width: 600px; margin: auto; padding: 24px; border: 1px solid #10b981; border-radius: 16px;">
         <h2 style="color: #047857; margin-top: 0;">💳 Payment Successful — Invoice #${org.invoice_number}</h2>
         <p>Dear ${org.owner_name},</p>
-        <p>We have successfully processed your payment of <strong>$${org.amount.toFixed(2)}</strong> for the <strong>${org.plan_name}</strong>.</p>
+        <p>We have successfully processed your payment of <strong>$${formattedAmount}</strong> for the <strong>${org.plan_name}</strong>.</p>
         <table style="width: 100%; border-collapse: collapse; margin: 16px 0;">
           <tr><td style="padding: 8px 0; color: #64748b;">Organization:</td><td><strong>${org.name}</strong></td></tr>
           <tr><td style="padding: 8px 0; color: #64748b;">Invoice Number:</td><td><strong>${org.invoice_number}</strong></td></tr>

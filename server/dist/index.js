@@ -4,7 +4,7 @@ import path from 'node:path';
 import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { ENV } from './config/env.js';
-import { db, seedDatabase, initDatabaseConnections } from './db/index.js';
+import { db, initDatabaseConnections } from './db/index.js';
 import { mySqlEngine } from './db/mysql-pool.js';
 import { sseManager } from './services/sse.js';
 import { ClientLifecycleService } from './services/client-lifecycle.js';
@@ -161,17 +161,11 @@ app.use((err, req, res, next) => {
         message: err.message || 'An unexpected error occurred',
     });
 });
-// Initialize database and start listening
-try {
-    seedDatabase();
-    console.log('✅ SQLite base schema verified & seeded successfully.');
-}
-catch (err) {
-    console.error('❌ Database initialization error:', err.message);
-}
-// Asynchronously initialize MySQL pool if configured
-initDatabaseConnections().catch((err) => {
-    console.warn('[Database Engine] Async database initialization warning:', err.message);
+// Initialize Enterprise MySQL database connections and schema
+initDatabaseConnections().then(() => {
+    console.log('✅ MySQL database engine ready & operational.');
+}).catch((err) => {
+    console.error('❌ [Database Engine] MySQL connection error:', err.message);
 });
 // Omnichannel Automated Lifecycle Background Engine (Periodic check every 12h)
 setTimeout(() => {
