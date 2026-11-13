@@ -34,12 +34,24 @@ import onboardingRoutes from './routes/onboarding.routes.js';
 const app = express();
 
 // Security and parser middleware
+app.use((req: Request, res: Response, next: NextFunction) => {
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('X-Frame-Options', 'DENY');
+  res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+  next();
+});
+
 app.use(cors({
   origin: true, // Allow frontend dev server
   credentials: true,
 }));
 
-app.use(express.json({ limit: '50mb' }));
+app.use(express.json({
+  limit: '50mb',
+  verify: (req: any, _res, buf) => {
+    req.rawBody = buf;
+  },
+}));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
 // Static Media Uploads Serving (Images, Videos, Documents for WhatsApp Templates)
@@ -47,7 +59,11 @@ const UPLOADS_DIR = path.resolve(process.cwd(), 'uploads');
 if (!fs.existsSync(UPLOADS_DIR)) {
   fs.mkdirSync(UPLOADS_DIR, { recursive: true });
 }
-app.use('/uploads', express.static(UPLOADS_DIR));
+app.use('/uploads', (req: Request, res: Response, next: NextFunction) => {
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('Content-Security-Policy', "default-src 'none'");
+  next();
+}, express.static(UPLOADS_DIR));
 
 // Health Check
 app.get('/api/v1/health', async (req: Request, res: Response) => {

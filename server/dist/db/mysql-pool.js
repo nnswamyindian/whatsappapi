@@ -20,7 +20,7 @@ export class MySQLDatabaseEngine {
             keepAliveInitialDelay: 10000,
             timezone: 'Z',
             dateStrings: true,
-            multipleStatements: true,
+            multipleStatements: false,
         };
         if (ENV.DATABASE_URL && ENV.DATABASE_URL.trim() !== '') {
             // Parse standard URL: mysql://user:pass@host:port/database?ssl=...

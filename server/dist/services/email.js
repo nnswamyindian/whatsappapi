@@ -32,9 +32,10 @@ export class EmailService {
         const logId = uuidv4();
         // 1. Prevent accidental duplicate sends within 60 seconds unless forced
         if (!forceResend) {
+            const sixtySecondsAgo = new Date(Date.now() - 60000).toISOString();
             const recentSend = db.queryOne(`SELECT id FROM email_logs 
          WHERE recipient = ? AND template_slug = ? AND status = 'sent' 
-         AND created_at >= datetime('now', '-60 seconds')`, [recipient.toLowerCase().trim(), templateSlug]);
+         AND created_at >= ?`, [recipient.toLowerCase().trim(), templateSlug, sixtySecondsAgo]);
             if (recentSend) {
                 return {
                     success: true,

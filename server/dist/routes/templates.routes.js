@@ -233,6 +233,21 @@ router.post('/upload-media', requireRole(['campaign_manager']), async (req, res)
         res.status(400).json({ error: 'File name and file content (base64) are required' });
         return;
     }
+    // Validate allowed extensions per media category to prevent malicious file uploads
+    const ext = path.extname(fileName).toLowerCase();
+    const ALLOWED_EXTS = {
+        IMAGE: ['.png', '.jpg', '.jpeg', '.webp'],
+        VIDEO: ['.mp4', '.3gp', '.mov'],
+        DOCUMENT: ['.pdf', '.doc', '.docx', '.xls', '.xlsx', '.txt', '.csv'],
+    };
+    const category = (mediaType || 'IMAGE').toUpperCase();
+    const allowed = ALLOWED_EXTS[category] || ALLOWED_EXTS.IMAGE;
+    if (!allowed.includes(ext)) {
+        res.status(400).json({
+            error: `Invalid file extension '${ext}'. Allowed extensions for ${category}: ${allowed.join(', ')}`,
+        });
+        return;
+    }
     // Strip possible data URI prefix (e.g., "data:image/png;base64,")
     const base64Data = fileBase64.replace(/^data:[^;]+;base64,/, '');
     const buffer = Buffer.from(base64Data, 'base64');

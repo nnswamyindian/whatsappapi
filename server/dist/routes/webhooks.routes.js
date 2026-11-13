@@ -71,20 +71,25 @@ router.post('/whatsapp', (req, res) => {
     if (body.object !== 'whatsapp_business_account') {
         return;
     }
-    // Optional HMAC-SHA256 Signature Verification if app secret configured
+    // HMAC-SHA256 Signature Verification using raw payload buffer if app secret is configured
     if (signature && ENV.META_APP_SECRET) {
         try {
+            const rawPayload = req.rawBody || Buffer.from(JSON.stringify(body));
             const expectedSig = `sha256=${crypto
                 .createHmac('sha256', ENV.META_APP_SECRET)
-                .update(JSON.stringify(body))
+                .update(rawPayload)
                 .digest('hex')}`;
-            // In production with exact raw body buffer:
-            // Note: If parsed by Express JSON, whitespace may differ slightly, so we log mismatch warnings safely
-            if (signature !== expectedSig && process.env.NODE_ENV === 'production' && !ENV.IS_SANDBOX) {
-                console.warn('[Meta Webhook] Signature verification notice: mismatch or body re-stringified');
+            const sigBuffer = Buffer.from(signature);
+            const expectedBuffer = Buffer.from(expectedSig);
+            const isValid = sigBuffer.length === expectedBuffer.length && crypto.timingSafeEqual(sigBuffer, expectedBuffer);
+            if (!isValid && process.env.NODE_ENV === 'production' && !ENV.IS_SANDBOX) {
+                console.warn('[Meta Webhook] Signature verification failed.');
+                return;
             }
         }
-        catch (e) { }
+        catch (e) {
+            console.warn('[Meta Webhook] Signature check error:', e.message);
+        }
     }
     try {
         for (const entry of body.entry || []) {
