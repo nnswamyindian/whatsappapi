@@ -1,7 +1,8 @@
 // Enterprise E2E Test Suite for MetaGreenWave
 const assert = require('assert');
 
-const BASE_URL = 'http://localhost:5000/api/v1';
+const PORT = process.env.PORT || 5021;
+const BASE_URL = `http://localhost:${PORT}/api/v1`;
 
 async function request(path, options = {}) {
   const url = `${BASE_URL}${path}`;
@@ -189,6 +190,28 @@ async function runTests() {
   assert.ok(Array.isArray(dispatchesRes.data), 'Dispatches array returned');
   assert.ok(dispatchesRes.data.length >= 3, 'All lifecycle events logged in audit table');
   console.log(`✅ Omnichannel Audit Log: ${dispatchesRes.data.length} recorded events in lifecycle_dispatches.`);
+
+  // 9. Meta Data Deletion & Privacy Compliance Portal
+  console.log('[9/9] Testing Meta Data Deletion Request & Status Lookup Portal...');
+  const delReq = await request('/meta/data-deletion/request', {
+    method: 'POST',
+    body: JSON.stringify({
+      name: 'Vikram Malhotra',
+      email: testEmail,
+      phone: testPhone,
+      reason: 'Automated E2E compliance validation test',
+    }),
+  });
+  assert.strictEqual(delReq.status, 200, 'Data deletion request should succeed');
+  assert.strictEqual(delReq.data.success, true);
+  assert.ok(delReq.data.confirmation_code, 'Must return a unique confirmation code');
+  console.log(`✅ Data Deletion Request Submitted: code=${delReq.data.confirmation_code}`);
+
+  const delStatus = await request(`/meta/data-deletion/status/${delReq.data.confirmation_code}`);
+  assert.strictEqual(delStatus.status, 200, 'Data deletion status lookup should succeed');
+  assert.strictEqual(delStatus.data.confirmationCode, delReq.data.confirmation_code);
+  assert.ok(delStatus.data.status, 'Status must be reported (in_progress or completed)');
+  console.log(`✅ Data Deletion Status Verified: status=${delStatus.data.status}`);
 
   console.log('\n======================================================');
   console.log('🎉 ALL METAGREENWAVE ENTERPRISE E2E CHECKS PASSED 100%!');

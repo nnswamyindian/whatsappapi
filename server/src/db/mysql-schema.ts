@@ -734,6 +734,57 @@ export const MYSQL_SCHEMA_STATEMENTS: string[] = [
     dispatched_at VARCHAR(64) NOT NULL,
     FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE,
     INDEX idx_lifecycle_org (organization_id, event_type)
+  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
+
+  // 43. Persistent Webhook Events (Multi-Worker PM2 Cluster Idempotency)
+  `CREATE TABLE IF NOT EXISTS webhook_events (
+    id VARCHAR(128) PRIMARY KEY,
+    event_type VARCHAR(64) NOT NULL,
+    provider_message_id VARCHAR(128),
+    waba_id VARCHAR(128),
+    phone_number_id VARCHAR(128),
+    payload_hash VARCHAR(64),
+    processed_at VARCHAR(64) NOT NULL,
+    INDEX idx_webhook_processed (processed_at),
+    INDEX idx_webhook_waba (waba_id),
+    INDEX idx_webhook_mid (provider_message_id)
+  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
+
+  // 44. Policy Consents (DPDPA & GDPR Auditable Acceptance Tracking)
+  `CREATE TABLE IF NOT EXISTS policy_consents (
+    id VARCHAR(64) PRIMARY KEY,
+    user_id VARCHAR(64) NOT NULL,
+    organization_id VARCHAR(64),
+    policy_name VARCHAR(64) NOT NULL,
+    policy_version VARCHAR(32) NOT NULL DEFAULT 'v2.0',
+    accepted_at VARCHAR(64) NOT NULL,
+    ip_address VARCHAR(64),
+    user_agent TEXT,
+    consent_category VARCHAR(64) NOT NULL DEFAULT 'essential',
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+    INDEX idx_consent_user (user_id),
+    INDEX idx_consent_policy (policy_name, policy_version)
+  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
+
+  // 45. Data Deletion Requests (User Portal & Meta Signed Request Callback)
+  `CREATE TABLE IF NOT EXISTS data_deletion_requests (
+    id VARCHAR(64) PRIMARY KEY,
+    confirmation_code VARCHAR(128) UNIQUE NOT NULL,
+    request_type VARCHAR(32) NOT NULL DEFAULT 'user_portal',
+    requester_name VARCHAR(255),
+    requester_email VARCHAR(255) NOT NULL,
+    organization_name VARCHAR(255),
+    account_identifier VARCHAR(255),
+    user_id VARCHAR(64),
+    meta_user_id VARCHAR(128),
+    request_details TEXT,
+    status VARCHAR(32) NOT NULL DEFAULT 'PENDING',
+    admin_notes TEXT,
+    created_at VARCHAR(64) NOT NULL,
+    completed_at VARCHAR(64),
+    INDEX idx_ddr_code (confirmation_code),
+    INDEX idx_ddr_email (requester_email),
+    INDEX idx_ddr_status (status)
   ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`
 ];
 

@@ -14,6 +14,12 @@ import { ContactPage } from './pages/public/ContactPage';
 import { FaqPage } from './pages/public/FaqPage';
 import { PrivacyPolicyPage } from './pages/public/PrivacyPolicyPage';
 import { TermsOfServicePage } from './pages/public/TermsOfServicePage';
+import { DataDeletionPage } from './pages/public/DataDeletionPage';
+import { CookiePolicyPage } from './pages/public/CookiePolicyPage';
+import { AcceptableUsePage } from './pages/public/AcceptableUsePage';
+import { RefundCancellationPage } from './pages/public/RefundCancellationPage';
+import { SecurityPage } from './pages/public/SecurityPage';
+import { StatusPage } from './pages/public/StatusPage';
 
 // Auth Pages
 import { LoginPage } from './pages/auth/LoginPage';
@@ -119,7 +125,16 @@ export const App: React.FC = () => {
             <Route path="contact" element={<ContactPage />} />
             <Route path="faq" element={<FaqPage />} />
             <Route path="privacy-policy" element={<PrivacyPolicyPage />} />
+            <Route path="privacy" element={<PrivacyPolicyPage />} />
             <Route path="terms-of-service" element={<TermsOfServicePage />} />
+            <Route path="terms" element={<TermsOfServicePage />} />
+            <Route path="data-deletion" element={<DataDeletionPage />} />
+            <Route path="cookies" element={<CookiePolicyPage />} />
+            <Route path="acceptable-use" element={<AcceptableUsePage />} />
+            <Route path="cancellation-refund" element={<RefundCancellationPage />} />
+            <Route path="refund-policy" element={<RefundCancellationPage />} />
+            <Route path="security" element={<SecurityPage />} />
+            <Route path="status" element={<StatusPage />} />
           </Route>
 
           {/* Public Auth & Application Status Routes */}

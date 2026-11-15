@@ -19,7 +19,7 @@ import {
 } from 'lucide-react';
 
 export const IntegrationsPage: React.FC = () => {
-  const { activeOrg } = useAuth();
+  const { activeOrg, user } = useAuth();
   const [connection, setConnection] = useState<WhatsAppConnection | null>(null);
   const [apiKeys, setApiKeys] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -32,6 +32,7 @@ export const IntegrationsPage: React.FC = () => {
   const [webhookVerifyToken, setWebhookVerifyToken] = useState('greenwave_verify_token_prod_99');
   const [savingConn, setSavingConn] = useState(false);
   const [testingConn, setTestingConn] = useState(false);
+  const [refreshingConn, setRefreshingConn] = useState(false);
   const [testResult, setTestResult] = useState<any>(null);
 
   // API Key Generator
@@ -51,8 +52,10 @@ export const IntegrationsPage: React.FC = () => {
   const [syncingTemplates, setSyncingTemplates] = useState(false);
   const [syncResult, setSyncResult] = useState<string | null>(null);
 
+  const isExchangingRef = React.useRef(false);
+
   const fetchData = () => {
-    Promise.all([
+    return Promise.all([
       api.get<WhatsAppConnection>('/whatsapp/status'),
       api.get('/api-keys'),
     ])
@@ -67,6 +70,75 @@ export const IntegrationsPage: React.FC = () => {
       .finally(() => setLoading(false));
   };
 
+  const loadFacebookSdk = (): Promise<void> => {
+    return new Promise((resolve) => {
+      if ((window as any).FB) {
+        resolve();
+        return;
+      }
+      const existingScript = document.getElementById('facebook-jssdk');
+      if (existingScript) {
+        const interval = setInterval(() => {
+          if ((window as any).FB) {
+            clearInterval(interval);
+            resolve();
+          }
+        }, 100);
+        return;
+      }
+      const script = document.createElement('script');
+      script.id = 'facebook-jssdk';
+      script.src = 'https://connect.facebook.net/en_US/sdk.js';
+      script.async = true;
+      script.defer = true;
+      script.onload = () => resolve();
+      script.onerror = () => {
+        console.error('Failed to load Meta Facebook SDK');
+        resolve();
+      };
+      document.body.appendChild(script);
+    });
+  };
+
+  const initFacebookSdk = (appId: string, version: string = 'v21.0') => {
+    if ((window as any).FB && appId) {
+      try {
+        (window as any).FB.init({
+          appId,
+          cookie: true,
+          xfbml: true,
+          version,
+        });
+      } catch (e) {
+        console.warn('FB.init error:', e);
+      }
+    }
+  };
+
+  const exchangeAuthCode = async (params: {
+    code?: string;
+    wabaId?: string;
+    phoneNumberId?: string;
+    isManualSandbox?: boolean;
+  }) => {
+    if (isExchangingRef.current) return;
+    isExchangingRef.current = true;
+    setEmbeddedLoading(true);
+    try {
+      const res = await api.post('/whatsapp/embedded-signup/exchange', params);
+      alert(res.message || 'WhatsApp Business Account connected successfully!');
+      await fetchData();
+    } catch (err: any) {
+      console.error('[Embedded Signup Exchange Error]:', err);
+      alert(err.message || 'Meta Embedded Signup exchange failed.');
+    } finally {
+      setEmbeddedLoading(false);
+      setTimeout(() => {
+        isExchangingRef.current = false;
+      }, 1500);
+    }
+  };
+
   useEffect(() => {
     fetchData();
 
@@ -77,15 +149,14 @@ export const IntegrationsPage: React.FC = () => {
         const data = typeof event.data === 'string' ? JSON.parse(event.data) : event.data;
         if (data.type === 'WA_EMBEDDED_SIGNUP') {
           console.log('[Meta Embedded Signup Event Received]:', data);
-          if (data.event === 'FINISH' || data.data?.phone_number_id) {
-            setEmbeddedLoading(true);
-            await api.post('/whatsapp/embedded-signup/exchange', {
-              wabaId: data.data?.waba_id,
-              phoneNumberId: data.data?.phone_number_id,
-              code: data.data?.code,
-            });
-            fetchData();
-            setEmbeddedLoading(false);
+          if (data.event === 'FINISH' || (data.data && (data.data.code || data.data.phone_number_id))) {
+            if (data.data?.code) {
+              await exchangeAuthCode({
+                code: data.data.code,
+                wabaId: data.data.waba_id,
+                phoneNumberId: data.data.phone_number_id,
+              });
+            }
           }
         }
       } catch (err) {}
@@ -96,62 +167,55 @@ export const IntegrationsPage: React.FC = () => {
   }, [activeOrg?.id]);
 
   const handleLaunchEmbeddedSignup = async () => {
-    setEmbeddedLoading(true);
-    // If FB SDK is loaded and Meta App ID is configured
     const metaAppId = (connection as any)?.metaAppId;
     const metaConfigId = (connection as any)?.metaConfigId;
+    const graphApiVersion = (connection as any)?.graphApiVersion || 'v21.0';
 
-    if ((window as any).FB && metaAppId && metaConfigId) {
-      (window as any).FB.login(
-        async (response: any) => {
-          if (response.authResponse?.code) {
-            try {
-              await api.post('/whatsapp/embedded-signup/exchange', {
-                code: response.authResponse.code,
-              });
-              alert('Meta WhatsApp Embedded Signup completed successfully!');
-              fetchData();
-            } catch (e: any) {
-              alert(e.message || 'Embedded signup exchange failed');
-            }
-          }
+    if (!metaAppId || !metaConfigId) {
+      alert('Meta App ID and Embedded Signup Configuration ID must be configured in system environment (.env) before initiating Facebook Login for Business.');
+      return;
+    }
+
+    setEmbeddedLoading(true);
+    await loadFacebookSdk();
+    initFacebookSdk(metaAppId, graphApiVersion);
+
+    if (!(window as any).FB) {
+      alert('Could not initialize official Meta Facebook SDK. Please check browser permissions or ad-blockers and try again.');
+      setEmbeddedLoading(false);
+      return;
+    }
+
+    (window as any).FB.login(
+      (response: any) => {
+        if (response.authResponse?.code) {
+          exchangeAuthCode({ code: response.authResponse.code });
+        } else {
           setEmbeddedLoading(false);
-        },
-        {
-          config_id: metaConfigId,
-          response_type: 'code',
-          override_default_response_type: true,
-          extras: {
-            feature: 'whatsapp_embedded_signup',
-            version: 2,
-          },
         }
-      );
-    } else {
-      // Prompt guided setup for customer or administrator
-      const inputWaba = prompt('Enter your Meta WhatsApp Business Account (WABA) ID:', wabaId || '109284102938120');
-      if (!inputWaba) {
-        setEmbeddedLoading(false);
-        return;
+      },
+      {
+        config_id: metaConfigId,
+        response_type: 'code',
+        override_default_response_type: true,
+        extras: {
+          feature: 'whatsapp_embedded_signup',
+          version: 2,
+        },
       }
-      const inputPhoneId = prompt('Enter your registered Phone Number ID:', phoneNumberId || '104928192837192');
-      if (!inputPhoneId) {
-        setEmbeddedLoading(false);
-        return;
-      }
+    );
+  };
 
-      try {
-        const res = await api.post('/whatsapp/embedded-signup/exchange', {
-          wabaId: inputWaba,
-          phoneNumberId: inputPhoneId,
-        });
-        alert(res.message || 'WhatsApp Business Connected successfully!');
-        fetchData();
-      } catch (err: any) {
-        alert(err.message || 'Onboarding failed');
-      } finally {
-        setEmbeddedLoading(false);
-      }
+  const handleRefreshConnection = async () => {
+    setRefreshingConn(true);
+    try {
+      const res = await api.post('/whatsapp/refresh');
+      alert(`Meta telemetry refreshed. Quality: ${res.connection?.quality_rating || 'GREEN'}, Tier: ${res.connection?.messaging_limit_tier || 'TIER_1K'}`);
+      fetchData();
+    } catch (err: any) {
+      alert(err.message || 'Failed to refresh connection details from Meta Graph API');
+    } finally {
+      setRefreshingConn(false);
     }
   };
 
@@ -303,6 +367,15 @@ export const IntegrationsPage: React.FC = () => {
             </div>
             <div className="flex items-center gap-2">
               <button
+                onClick={handleRefreshConnection}
+                disabled={refreshingConn}
+                className="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 rounded-lg text-slate-700 font-semibold text-xs flex items-center gap-1"
+                title="Refresh Quality Rating and Messaging Limit Tier from Meta"
+              >
+                <RefreshCw className={`w-3 h-3 ${refreshingConn ? 'animate-spin' : ''}`} />
+                <span>Refresh Meta Data</span>
+              </button>
+              <button
                 onClick={handleSyncTemplates}
                 disabled={syncingTemplates}
                 className="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 rounded-lg text-slate-700 font-semibold text-xs flex items-center gap-1"
@@ -384,8 +457,16 @@ export const IntegrationsPage: React.FC = () => {
                     <strong className="text-slate-800">{connection.phone_number_id}</strong>
                   </div>
                   <div>
+                    <span className="text-slate-400">Limit Tier:</span>{' '}
+                    <strong className="text-brand-700">{connection.messaging_limit_tier || 'TIER_1K'}</strong>
+                  </div>
+                  <div>
                     <span className="text-slate-400">Storage:</span>{' '}
                     <strong className="text-teal-700">AES-256-GCM Encrypted</strong>
+                  </div>
+                  <div>
+                    <span className="text-slate-400">Sync:</span>{' '}
+                    <strong className="text-slate-600">{connection.last_sync_at ? new Date(connection.last_sync_at).toLocaleTimeString() : 'Recent'}</strong>
                   </div>
                 </div>
 
@@ -482,10 +563,10 @@ export const IntegrationsPage: React.FC = () => {
                 </div>
 
                 <div>
-                  <label className="block font-semibold text-slate-700 mb-1">WABA ID</label>
+                  <label className="block font-semibold text-slate-700 mb-1">WhatsApp Business Account (WABA) ID</label>
                   <input
                     type="text"
-                    placeholder="e.g. 109284102938120"
+                    placeholder="Enter Meta WABA ID (from Meta Business Suite)"
                     value={wabaId}
                     onChange={(e) => setWabaId(e.target.value)}
                     className="w-full px-3 py-1.5 border border-slate-300 rounded-lg font-mono text-xs"
@@ -496,7 +577,7 @@ export const IntegrationsPage: React.FC = () => {
                   <label className="block font-semibold text-slate-700 mb-1">Phone Number ID</label>
                   <input
                     type="text"
-                    placeholder="e.g. 104928192837192"
+                    placeholder="Enter Meta Phone Number ID"
                     value={phoneNumberId}
                     onChange={(e) => setPhoneNumberId(e.target.value)}
                     className="w-full px-3 py-1.5 border border-slate-300 rounded-lg font-mono text-xs"

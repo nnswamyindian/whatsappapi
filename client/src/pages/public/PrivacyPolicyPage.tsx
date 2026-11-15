@@ -1,5 +1,6 @@
 import React from 'react';
-import { ShieldCheck } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { ShieldCheck, ArrowRight, Lock, Database, Trash2 } from 'lucide-react';
 
 export const PrivacyPolicyPage: React.FC = () => {
   return (
@@ -14,58 +15,99 @@ export const PrivacyPolicyPage: React.FC = () => {
 
       <div className="prose prose-slate text-xs sm:text-sm text-slate-700 leading-relaxed space-y-6">
         <section className="space-y-3">
-          <h2 className="text-lg font-bold text-slate-900">1. Overview & Scope</h2>
+          <h2 className="text-lg font-bold text-slate-900">1. Overview & Operating Entity</h2>
           <p>
-            MetaGreenWave Technologies ("MetaGreenWave", "we", "us", "our") provides a multi-tenant business messaging software platform that facilitates communication between business subscribers ("Customers") and their end-user recipients ("Recipients") via the official Meta WhatsApp Cloud API. This Privacy Policy details our practices concerning data collection, encryption, tenant isolation, and regulatory compliance under GDPR, CCPA, and Meta Platform Policies.
+            This Privacy Policy governs the collection, processing, and protection of personal data by <strong>Digi8 Solutions</strong> ("we", "us", "our"), operating the WhatsApp Business messaging SaaS platform <strong>MetaGreenWave</strong> (accessible at metagreenwave.com).
+          </p>
+          <p>
+            MetaGreenWave facilitates communications between business subscribers ("Customers") and their end-user recipients ("Recipients") via the official Meta WhatsApp Cloud API. We are committed to strict compliance with the Digital Personal Data Protection Act (DPDPA 2023), the General Data Protection Regulation (GDPR), the California Consumer Privacy Act (CCPA), and Meta Platform Policies.
           </p>
         </section>
 
         <section className="space-y-3">
-          <h2 className="text-lg font-bold text-slate-900">2. Data We Collect as a Processor</h2>
+          <h2 className="text-lg font-bold text-slate-900">2. Roles: Data Controller vs. Data Processor</h2>
           <p>
-            In our capacity as a data processor on behalf of our Customers, we store customer phone numbers (normalized strictly to E.164 format), message bodies, template parameters, delivery and read timestamps, and customer service conversation transcripts.
+            <strong>Customer Account Data (Data Controller):</strong> When you register for an account, subscribe to a plan, or contact our support team, Digi8 Solutions acts as a Data Controller for your administrative profile (name, business email, business category, encrypted credentials, and billing records).
           </p>
           <p>
-            We require all Customers to record explicit, auditable opt-in consent for all Recipients prior to uploading contact files or dispatching broadcast messaging.
-          </p>
-        </section>
-
-        <section className="space-y-3">
-          <h2 className="text-lg font-bold text-slate-900">3. Encryption & Credential Protection at Rest</h2>
-          <p>
-            Meta Cloud API System User access tokens, app secrets, and webhook secrets are cryptographically encrypted at rest using AES-256-GCM authenticated encryption. Encryption keys are securely managed server-side and never exposed to browser clients or logged in plain text.
-          </p>
-          <p>
-            One-Time Passwords (OTPs) generated via our Transactional API are never stored in plain text; they are hashed using SHA-256 with salt and purged immediately upon expiration or verification.
+            <strong>Customer Messaging & Contact Data (Data Processor):</strong> When you upload recipient lists, create audience segments, or dispatch WhatsApp templates, Digi8 Solutions acts strictly as a Data Processor on your behalf. You (the Customer) remain the Data Controller responsible for securing valid, verifiable consent from your recipients.
           </p>
         </section>
 
         <section className="space-y-3">
-          <h2 className="text-lg font-bold text-slate-900">4. Suppression & Opt-Out Blacklist Enforcement</h2>
+          <h2 className="text-lg font-bold text-slate-900">3. Data We Process</h2>
+          <ul className="list-disc list-inside space-y-1.5 pl-2">
+            <li><strong>Recipient Identifiers:</strong> Recipient phone numbers normalized strictly into international E.164 format.</li>
+            <li><strong>Messaging Metadata:</strong> Template names, parameters, delivery timestamps, read status receipts, and incoming chat text.</li>
+            <li><strong>Meta Graph API Credentials:</strong> WABA ID, Phone Number ID, and System User Access Tokens (all stored cryptographically encrypted using AES-256-GCM).</li>
+            <li><strong>Audit & Consent Records:</strong> Timestamp, policy version, and IP address recorded when accepting platform terms.</li>
+          </ul>
+        </section>
+
+        <section className="space-y-3">
+          <h2 className="text-lg font-bold text-slate-900">4. Cryptographic Security & Credential Protection</h2>
           <p>
-            Recipients retain the absolute right to opt out of promotional messages. When a recipient replies with keywords such as "STOP" or "UNSUBSCRIBE", our automated reply engine immediately enters their phone number into the Customer's suppression blacklist, preventing any future broadcast deliveries.
+            All WhatsApp access tokens, webhook verify tokens, and API keys are protected at rest with authenticated <strong>AES-256-GCM</strong> encryption. Encryption keys reside in secure server environments and are never transmitted to browser clients.
+          </p>
+          <p>
+            One-Time Passwords (OTPs) and account passwords are encrypted using salted SHA-256 or PBKDF2 hashes. We never store plain text passwords or raw OTP codes.
           </p>
         </section>
 
         <section className="space-y-3">
-          <h2 className="text-lg font-bold text-slate-900">5. Multi-Tenant Scoping & Data Retention</h2>
+          <h2 className="text-lg font-bold text-slate-900">5. Multi-Tenant Customer Isolation</h2>
           <p>
-            Every database query is strictly scoped by <code>organization_id</code>. Customers are strictly isolated from one another. Customers may request complete deletion of their workspace data, contacts, and message logs at any time by contacting our compliance officer at <code>privacy@metagreenwave.io</code>.
+            Every customer workspace is strictly isolated. All relational database queries, contact books, message logs, and audience filters enforce tenant boundaries via <code>organization_id</code> at both the routing and data layers. No customer can access or inspect another workspace's data.
           </p>
         </section>
 
         <section className="space-y-3">
-          <h2 className="text-lg font-bold text-slate-900">6. Contact Information</h2>
+          <h2 className="text-lg font-bold text-slate-900">6. Recipient Opt-Out & Suppression Enforcement</h2>
           <p>
-            For privacy inquiries, GDPR data subject access requests, or compliance questions, please contact:
+            Recipients maintain the fundamental right to revoke messaging consent. When a recipient responds with standard opt-out keywords ("STOP", "UNSUBSCRIBE", "CANCEL"), our automated engine places their phone number on the organization's suppression blacklist, preventing any future broadcast deliveries.
+          </p>
+        </section>
+
+        <section className="space-y-3 bg-slate-50 p-6 rounded-2xl border border-slate-200">
+          <h2 className="text-lg font-bold text-slate-900 flex items-center gap-2">
+            <Trash2 className="w-5 h-5 text-rose-600" />
+            <span>7. User Data Deletion Rights & Portal</span>
+          </h2>
+          <p>
+            Under DPDPA, GDPR, and Meta Platform Policies, you have the right to request erasure of your personal data, customer contacts, and connected WhatsApp credentials at any time.
+          </p>
+          <p>
+            We provide a dedicated, public Data Deletion Portal with real-time status tracking and support for automated Meta signed requests:
+          </p>
+          <div className="pt-2">
+            <Link
+              to="/data-deletion"
+              className="inline-flex items-center gap-2 px-4 py-2 bg-brand-600 hover:bg-brand-700 text-white font-bold rounded-xl text-xs shadow-xs transition-all"
+            >
+              <span>Access Data Deletion Instructions & Portal</span>
+              <ArrowRight className="w-4 h-4" />
+            </Link>
+          </div>
+        </section>
+
+        <section className="space-y-3">
+          <h2 className="text-lg font-bold text-slate-900">8. Data Retention Policy</h2>
+          <p>
+            Message logs and delivery receipts are retained for operational verification and billing audit purposes for 180 days, after which they are systematically archived or purged. Webhook event deduplication records are purged after 14 days. Workspace account data is retained for the active lifecycle of your subscription.
+          </p>
+        </section>
+
+        <section className="space-y-3">
+          <h2 className="text-lg font-bold text-slate-900">9. Contact & Data Protection Officer</h2>
+          <p>
+            For privacy inquiries, regulatory compliance requests, or data deletion queries, please contact Digi8 Solutions at:
             <br />
-            <strong>MetaGreenWave Compliance & Data Protection Office</strong>
+            <strong>Digi8 Solutions &mdash; MetaGreenWave Data Protection Office</strong>
             <br />
-            Email: <code>privacy@metagreenwave.io</code>
+            Email: <a href="mailto:hello@digi8solutions.com" className="text-brand-600 underline font-semibold">hello@digi8solutions.com</a>
           </p>
         </section>
       </div>
     </div>
   );
 };
-

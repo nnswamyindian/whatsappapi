@@ -47,37 +47,60 @@ router.get('/status', (req, res) => {
 });
 // Meta WhatsApp Embedded Signup v4 Onboarding Exchange
 router.post('/embedded-signup/exchange', requireRole(['admin']), async (req, res) => {
-    const { code, wabaId, phoneNumberId } = req.body;
+    const { code, wabaId, phoneNumberId, isManualSandbox } = req.body;
     const orgId = req.auth.orgId;
     const now = new Date().toISOString();
-    if (!code && (!wabaId || !phoneNumberId)) {
-        res.status(400).json({
-            error: 'Missing Embedded Signup details',
-            message: 'Authorization code or verified WABA & Phone Number IDs are required.',
-        });
-        return;
+    // Enforce authentic Meta OAuth code for standard customer Embedded Signup
+    if (!code) {
+        // Only platform super-admins in deliberate sandbox mode can configure assisted sandbox testing
+        if (req.auth?.isPlatformAdmin && isManualSandbox && wabaId && phoneNumberId) {
+            console.log(`[Admin Notice] Platform admin ${req.auth.email} manually provisioned sandbox WABA credentials for org ${orgId}`);
+        }
+        else {
+            res.status(400).json({
+                error: 'Missing Authorization Code',
+                message: 'A valid authorization code returned by Meta Embedded Signup is required to connect your WhatsApp Business Account.',
+            });
+            return;
+        }
     }
     try {
         let accessToken = '';
         let displayPhoneNumber = '';
         let verifiedName = 'Connected WhatsApp Business';
-        if (code && ENV.META_APP_SECRET && ENV.META_APP_ID) {
+        let qualityRating = 'GREEN';
+        let messagingLimitTier = 'TIER_1K';
+        if (code) {
+            if (!ENV.META_APP_SECRET || !ENV.META_APP_ID) {
+                res.status(500).json({
+                    error: 'Configuration Incomplete',
+                    message: 'Meta App ID or App Secret is not configured on the platform server. Please contact platform administrators.',
+                });
+                return;
+            }
             // 1. Exchange OAuth code for Meta System User / Access Token
             const tokenUrl = `https://graph.facebook.com/${ENV.META_API_VERSION}/oauth/access_token?client_id=${ENV.META_APP_ID}&client_secret=${ENV.META_APP_SECRET}&code=${code}`;
             const tokenRes = await fetch(tokenUrl);
             const tokenData = await tokenRes.json();
-            if (tokenData.access_token) {
-                accessToken = tokenData.access_token;
+            if (!tokenRes.ok || !tokenData.access_token) {
+                const errorMsg = tokenData.error?.message || 'Meta OAuth token exchange failed with provided code.';
+                console.warn('[Meta Embedded Signup Exchange Failed]:', errorMsg);
+                res.status(400).json({
+                    error: 'Meta Authorization Exchange Failed',
+                    message: errorMsg,
+                });
+                return;
             }
+            accessToken = tokenData.access_token;
         }
-        // Fallback to configured environment access token if running in assisted sandbox/partner setup
-        if (!accessToken && ENV.META_ACCESS_TOKEN) {
-            accessToken = ENV.META_ACCESS_TOKEN;
+        else if (req.auth?.isPlatformAdmin && isManualSandbox) {
+            // Platform admin explicit sandbox provisioning
+            accessToken = ENV.META_ACCESS_TOKEN || '';
         }
         // 2. Fetch phone details and verified name if live access token available
         if (accessToken && phoneNumberId) {
             try {
-                const phoneUrl = `https://graph.facebook.com/${ENV.META_API_VERSION}/${phoneNumberId}?fields=display_phone_number,verified_name,quality_rating`;
+                const phoneUrl = `https://graph.facebook.com/${ENV.META_API_VERSION}/${phoneNumberId}?fields=display_phone_number,verified_name,quality_rating,messaging_limit_tier`;
                 const phoneRes = await fetch(phoneUrl, {
                     headers: { Authorization: `Bearer ${accessToken}` },
                 });
@@ -85,6 +108,8 @@ router.post('/embedded-signup/exchange', requireRole(['admin']), async (req, res
                     const pData = await phoneRes.json();
                     displayPhoneNumber = pData.display_phone_number || '';
                     verifiedName = pData.verified_name || verifiedName;
+                    qualityRating = pData.quality_rating || qualityRating;
+                    messagingLimitTier = pData.messaging_limit_tier || messagingLimitTier;
                 }
                 // 3. Automatically subscribe application to WABA webhooks
                 if (wabaId) {
@@ -95,42 +120,101 @@ router.post('/embedded-signup/exchange', requireRole(['admin']), async (req, res
                 }
             }
             catch (e) {
-                console.warn('[Embedded Signup Setup Warning]:', e);
+                console.warn('[Embedded Signup Metadata Warning]:', e.message);
             }
         }
-        // 4. Encrypt credentials at rest
+        // 4. Encrypt credentials at rest using AES-256-GCM
         const encryptedToken = accessToken ? encryptSecret(accessToken) : null;
         const existing = db.queryOne('SELECT id FROM whatsapp_connections WHERE organization_id = ?', [orgId]);
+        const connMode = accessToken ? 'live' : 'sandbox';
         if (existing) {
             db.execute(`UPDATE whatsapp_connections
-         SET mode = 'live',
+         SET mode = ?,
              waba_id = ?,
              phone_number_id = ?,
              access_token = COALESCE(?, access_token),
              display_phone_number = COALESCE(?, display_phone_number),
              verified_name = COALESCE(?, verified_name),
+             quality_rating = ?,
+             messaging_limit_tier = ?,
              status = 'connected',
              last_sync_at = ?,
              updated_at = ?
-         WHERE organization_id = ?`, [wabaId, phoneNumberId, encryptedToken, displayPhoneNumber, verifiedName, now, now, orgId]);
+         WHERE organization_id = ?`, [connMode, wabaId, phoneNumberId, encryptedToken, displayPhoneNumber, verifiedName, qualityRating, messagingLimitTier, now, now, orgId]);
         }
         else {
             db.execute(`INSERT INTO whatsapp_connections
-         (id, organization_id, provider, mode, waba_id, phone_number_id, access_token, display_phone_number, verified_name, status, last_sync_at, created_at, updated_at)
-         VALUES (?, ?, 'meta_cloud', 'live', ?, ?, ?, ?, ?, 'connected', ?, ?, ?)`, [uuidv4(), orgId, wabaId, phoneNumberId, encryptedToken, displayPhoneNumber, verifiedName, now, now, now]);
+         (id, organization_id, provider, mode, waba_id, phone_number_id, access_token, display_phone_number, verified_name, quality_rating, messaging_limit_tier, status, last_sync_at, created_at, updated_at)
+         VALUES (?, ?, 'meta_cloud', ?, ?, ?, ?, ?, ?, ?, ?, 'connected', ?, ?, ?)`, [uuidv4(), orgId, connMode, wabaId, phoneNumberId, encryptedToken, displayPhoneNumber, verifiedName, qualityRating, messagingLimitTier, now, now, now]);
         }
+        // 5. Record auditable event
+        db.execute(`INSERT INTO audit_logs (id, organization_id, user_id, user_email, action, resource_type, resource_id, details_json, created_at)
+       VALUES (?, ?, ?, ?, 'WHATSAPP_CONNECT_SUCCESS', 'whatsapp_connection', ?, ?, ?)`, [
+            uuidv4(),
+            orgId,
+            req.auth?.userId || 'unknown',
+            req.auth?.email || 'unknown',
+            phoneNumberId || wabaId,
+            JSON.stringify({ wabaId, phoneNumberId, displayPhoneNumber, mode: connMode }),
+            now,
+        ]);
         res.json({
             success: true,
-            message: 'Meta WhatsApp Embedded Signup completed successfully! Connected and subscribed to webhooks.',
+            message: 'Meta WhatsApp Embedded Signup completed successfully! Verified credentials encrypted and webhooks subscribed.',
             wabaId,
             phoneNumberId,
             displayPhoneNumber,
             verifiedName,
+            qualityRating,
+            messagingLimitTier,
         });
     }
     catch (err) {
         console.error('[Embedded Signup Error]:', err);
         res.status(500).json({ error: 'Embedded Signup Exchange Failed', message: err.message });
+    }
+});
+// Refresh WhatsApp Connection Details from Meta (quality rating, display name, tier)
+router.post('/refresh', requireRole(['admin']), async (req, res) => {
+    const orgId = req.auth.orgId;
+    const conn = db.queryOne('SELECT * FROM whatsapp_connections WHERE organization_id = ?', [orgId]);
+    if (!conn || !conn.access_token || !conn.phone_number_id) {
+        res.status(400).json({ error: 'No live WhatsApp connection to refresh' });
+        return;
+    }
+    try {
+        const { decryptSecret } = await import('../utils/crypto.js');
+        const token = decryptSecret(conn.access_token);
+        const phoneUrl = `https://graph.facebook.com/${ENV.META_API_VERSION}/${conn.phone_number_id}?fields=display_phone_number,verified_name,quality_rating,messaging_limit_tier`;
+        const response = await fetch(phoneUrl, {
+            headers: { Authorization: `Bearer ${token}` },
+        });
+        if (!response.ok) {
+            const errData = await response.json();
+            res.status(400).json({ error: 'Meta Refresh Failed', message: errData.error?.message || 'Failed to refresh details from Meta' });
+            return;
+        }
+        const data = await response.json();
+        const now = new Date().toISOString();
+        db.execute(`UPDATE whatsapp_connections
+       SET display_phone_number = COALESCE(?, display_phone_number),
+           verified_name = COALESCE(?, verified_name),
+           quality_rating = COALESCE(?, quality_rating),
+           messaging_limit_tier = COALESCE(?, messaging_limit_tier),
+           last_sync_at = ?,
+           updated_at = ?
+       WHERE organization_id = ?`, [data.display_phone_number, data.verified_name, data.quality_rating, data.messaging_limit_tier, now, now, orgId]);
+        res.json({
+            success: true,
+            message: 'Connection details refreshed from Meta Graph API',
+            display_phone_number: data.display_phone_number,
+            verified_name: data.verified_name,
+            quality_rating: data.quality_rating,
+            messaging_limit_tier: data.messaging_limit_tier,
+        });
+    }
+    catch (err) {
+        res.status(500).json({ error: 'Refresh failed', message: err.message });
     }
 });
 // Disconnect WhatsApp Connection

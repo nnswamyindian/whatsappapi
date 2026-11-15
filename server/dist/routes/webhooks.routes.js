@@ -6,18 +6,36 @@ import { sseManager } from '../services/sse.js';
 import { v4 as uuidv4 } from 'uuid';
 import { workflowEngine } from '../services/workflow-engine.js';
 const router = Router();
-// In-memory set for deduplicating webhook events (capped to prevent memory growth)
-const processedEventIds = new Set();
-function markAndCheckDuplicate(eventId) {
-    if (processedEventIds.has(eventId))
-        return true;
-    if (processedEventIds.size > 20000) {
-        const firstItems = Array.from(processedEventIds).slice(0, 5000);
-        firstItems.forEach((id) => processedEventIds.delete(id));
+/**
+ * Persistent Webhook Event Deduplication (Multi-Worker PM2 Cluster Idempotency)
+ * Stores processed event identifiers in MySQL `webhook_events` table to ensure
+ * reliable deduplication across multiple PM2 worker clusters and server restarts.
+ */
+function markAndCheckDuplicate(eventId, eventType = 'message', wabaId, phoneNumberId) {
+    if (!eventId)
+        return false;
+    try {
+        const existing = db.queryOne('SELECT id FROM webhook_events WHERE id = ?', [eventId]);
+        if (existing) {
+            return true; // Already processed by this or another PM2 cluster worker
+        }
+        db.execute(`INSERT INTO webhook_events (id, event_type, waba_id, phone_number_id, processed_at)
+       VALUES (?, ?, ?, ?, ?)`, [eventId, eventType, wabaId || null, phoneNumberId || null, new Date().toISOString()]);
+        return false;
     }
-    processedEventIds.add(eventId);
-    return false;
+    catch (err) {
+        // Concurrent insert or collision treated safely as duplicate
+        return true;
+    }
 }
+// Periodic cleanup of webhook event records older than 14 days
+setInterval(() => {
+    try {
+        const cutoffDate = new Date(Date.now() - 14 * 86400000).toISOString();
+        db.execute('DELETE FROM webhook_events WHERE processed_at < ?', [cutoffDate]);
+    }
+    catch (e) { }
+}, 6 * 3600000);
 // Status hierarchy to prevent out-of-order event regressions
 const STATUS_ORDER = {
     queued: 1,
@@ -115,8 +133,9 @@ router.post('/whatsapp', (req, res) => {
                     continue;
                 const value = change.value;
                 const phoneNumberId = value.metadata?.phone_number_id;
-                // Locate organization linked to this phone number
-                const conn = db.queryOne('SELECT organization_id FROM whatsapp_connections WHERE phone_number_id = ?', [phoneNumberId]);
+                const wabaId = entry.id;
+                // Locate organization linked to this phone number or WABA ID
+                const conn = db.queryOne('SELECT organization_id FROM whatsapp_connections WHERE phone_number_id = ? OR waba_id = ?', [phoneNumberId, wabaId]);
                 const orgId = conn?.organization_id;
                 // A. Handle Outbound Message Status Updates (sent, delivered, read, failed)
                 if (value.statuses && Array.isArray(value.statuses)) {
@@ -128,7 +147,7 @@ router.post('/whatsapp', (req, res) => {
                             : new Date().toISOString();
                         // Deduplication check
                         const dedupeKey = `status_${wamid}_${newStatus}`;
-                        if (markAndCheckDuplicate(dedupeKey))
+                        if (markAndCheckDuplicate(dedupeKey, 'status', wabaId, phoneNumberId))
                             continue;
                         // Extract error details if message failed
                         let errorCode = null;
@@ -197,7 +216,7 @@ router.post('/whatsapp', (req, res) => {
                 if (value.messages && Array.isArray(value.messages)) {
                     for (const inMsg of value.messages) {
                         const wamid = inMsg.id;
-                        if (markAndCheckDuplicate(`inbound_${wamid}`))
+                        if (markAndCheckDuplicate(`inbound_${wamid}`, 'inbound', wabaId, phoneNumberId))
                             continue;
                         const fromPhone = `+${inMsg.from}`;
                         let textBody = '';

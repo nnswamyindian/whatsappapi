@@ -1,6 +1,6 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
-import { ShieldCheck, Server, Globe2, MessageSquare, ArrowRight, Lock, CheckCircle2 } from 'lucide-react';
+import { ShieldCheck, Server, Globe2, MessageSquare, ArrowRight, Lock, CheckCircle2, Database } from 'lucide-react';
 
 export const AboutPage: React.FC = () => {
   return (
@@ -8,13 +8,13 @@ export const AboutPage: React.FC = () => {
       {/* Hero */}
       <div className="text-center space-y-4 max-w-3xl mx-auto">
         <span className="text-xs font-bold uppercase tracking-wider text-brand-700 bg-brand-50 px-3 py-1 rounded-full border border-brand-200">
-          About MetaGreenWave
+          About MetaGreenWave by Digi8 Solutions
         </span>
         <h1 className="text-4xl sm:text-5xl font-extrabold text-slate-900 tracking-tight">
           Engineered for Trust, Performance, and Compliance
         </h1>
         <p className="text-base sm:text-lg text-slate-600 leading-relaxed">
-          MetaGreenWave is an enterprise-grade software platform built to enable legitimate businesses to communicate reliably and respectfully with their customers over WhatsApp.
+          <strong>MetaGreenWave</strong> is a multi-tenant WhatsApp Business Messaging SaaS platform developed and operated by <strong>Digi8 Solutions</strong>. We enable legitimate businesses to communicate reliably, securely, and respectfully with their customers over the official Meta WhatsApp Cloud API.
         </p>
       </div>
 
@@ -26,7 +26,7 @@ export const AboutPage: React.FC = () => {
           </div>
           <h3 className="text-xl font-bold text-slate-900">Zero Tolerance for Spam</h3>
           <p className="text-xs sm:text-sm text-slate-600 leading-relaxed">
-            We operate an internal Super Admin approval process for every registered business. We mandate explicit opt-in consent records and maintain automated suppression blacklists to protect recipients and maintain high sender quality ratings.
+            We operate an internal administrator review and approval process for every registered business. We mandate explicit recipient opt-in consent records and maintain automated suppression blacklists to protect recipients and maintain high sender quality ratings.
           </p>
         </div>
 
@@ -34,9 +34,9 @@ export const AboutPage: React.FC = () => {
           <div className="w-12 h-12 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center font-bold">
             <Server className="w-6 h-6" />
           </div>
-          <h3 className="text-xl font-bold text-slate-900">Official Infrastructure Only</h3>
+          <h3 className="text-xl font-bold text-slate-900">Official Meta Cloud API</h3>
           <p className="text-xs sm:text-sm text-slate-600 leading-relaxed">
-            MetaGreenWave integrates solely through official Meta WhatsApp Cloud API endpoints (v21.0) and Meta Embedded Signup. We never use unofficial browser automations, reverse-engineered protocols, or unauthorized gateways.
+            MetaGreenWave integrates solely through official Meta WhatsApp Cloud API endpoints (v21.0) and official Meta Embedded Signup. We never use unofficial browser automations, reverse-engineered protocols, or unauthorized gateways.
           </p>
         </div>
 
@@ -46,7 +46,7 @@ export const AboutPage: React.FC = () => {
           </div>
           <h3 className="text-xl font-bold text-slate-900">Multi-Tenant Security</h3>
           <p className="text-xs sm:text-sm text-slate-600 leading-relaxed">
-            Every business customer is isolated within their own strict workspace boundary. Tokens and secrets are encrypted at rest with AES-256-GCM, and queries enforce organization scoping across all 24 relational database tables.
+            Every business customer is strictly isolated within their own workspace boundary. Tokens and credentials are encrypted at rest with authenticated AES-256-GCM, and queries enforce organization scoping across all 27 database tables.
           </p>
         </div>
       </div>
@@ -58,10 +58,10 @@ export const AboutPage: React.FC = () => {
         </h2>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 text-xs text-slate-700">
           <div className="flex items-start gap-3">
-            <CheckCircle2 className="w-5 h-5 text-brand-600 shrink-0 mt-0.5" />
+            <Database className="w-5 h-5 text-brand-600 shrink-0 mt-0.5" />
             <div>
-              <strong className="text-slate-900 block font-bold text-sm">WAL Mode Relational Storage</strong>
-              SQLite with Write-Ahead Logging for high concurrency, low latency, and single-file backup capability.
+              <strong className="text-slate-900 block font-bold text-sm">Enterprise MySQL Relational Storage</strong>
+              ACID-compliant transactions, connection pooling, foreign-key relational integrity, and cluster-wide multi-worker process safety.
             </div>
           </div>
           <div className="flex items-start gap-3">
@@ -81,13 +81,20 @@ export const AboutPage: React.FC = () => {
           <div className="flex items-start gap-3">
             <CheckCircle2 className="w-5 h-5 text-brand-600 shrink-0 mt-0.5" />
             <div>
-              <strong className="text-slate-900 block font-bold text-sm">Zero CORS Single-Port Deployment</strong>
-              Express efficiently serves the compiled React client bundle directly on port 5000 in production.
+              <strong className="text-slate-900 block font-bold text-sm">Zero-CORS Production Deployment</strong>
+              High-performance Node.js backend serves compiled React SPA bundles directly with hardened security headers and Nginx reverse proxy.
             </div>
           </div>
         </div>
       </div>
+
+      {/* Operator Info */}
+      <div className="bg-white p-8 rounded-3xl border border-slate-200 text-xs sm:text-sm text-slate-700 space-y-3">
+        <h3 className="text-lg font-bold text-slate-900">Operating Entity & Governance</h3>
+        <p>
+          MetaGreenWave is built and operated by <strong>Digi8 Solutions</strong>, a modern technology and software solutions organization. For enterprise inquiries, partnership queries, or compliance audits, contact us directly at <a href="mailto:hello@digi8solutions.com" className="text-brand-600 font-bold underline">hello@digi8solutions.com</a>.
+        </p>
+      </div>
     </div>
   );
 };
-

@@ -8,6 +8,8 @@ import {
   ArrowRight,
   Globe,
   ExternalLink,
+  Activity,
+  Lock,
 } from 'lucide-react';
 
 export const PublicLayout: React.FC<{ children?: React.ReactNode }> = ({ children }) => {
@@ -16,8 +18,8 @@ export const PublicLayout: React.FC<{ children?: React.ReactNode }> = ({ childre
   const navLinks = [
     { label: 'Features', to: '/features' },
     { label: 'Solutions', to: '/solutions' },
-    { label: 'How It Works', to: '/#how-it-works' },
     { label: 'Pricing', to: '/pricing' },
+    { label: 'Security', to: '/security' },
     { label: 'About', to: '/about' },
     { label: 'Contact', to: '/contact' },
   ];
@@ -26,7 +28,7 @@ export const PublicLayout: React.FC<{ children?: React.ReactNode }> = ({ childre
     <div className="min-h-screen flex flex-col bg-white text-slate-900 font-sans selection:bg-brand-100 selection:text-brand-900">
       {/* Top Banner Notice */}
       <div className="bg-slate-900 text-slate-300 text-xs py-2 px-4 text-center font-medium border-b border-slate-800">
-        <span>⚡ Built with official Meta WhatsApp Cloud API v21.0 &bull; Multi-Tenant Enterprise Architecture</span>
+        <span>⚡ MetaGreenWave by Digi8 Solutions &bull; Official WhatsApp Business Platform Cloud API Integration</span>
       </div>
 
       {/* Main Public Header */}
@@ -41,15 +43,15 @@ export const PublicLayout: React.FC<{ children?: React.ReactNode }> = ({ childre
               <div className="flex items-center gap-1.5">
                 <span className="font-extrabold text-xl text-slate-900 tracking-tight">MetaGreenWave</span>
                 <span className="text-[10px] font-bold uppercase tracking-wider bg-brand-50 text-brand-700 px-1.5 py-0.5 rounded border border-brand-200">
-                  Cloud API v21.0
+                  by Digi8 Solutions
                 </span>
               </div>
-              <p className="text-[11px] text-slate-500 font-medium -mt-0.5">Enterprise WhatsApp Business Platform</p>
+              <p className="text-[11px] text-slate-500 font-medium -mt-0.5">WhatsApp Business Messaging SaaS Platform</p>
             </div>
           </Link>
 
           {/* Desktop Navigation */}
-          <nav className="hidden md:flex items-center gap-8">
+          <nav className="hidden md:flex items-center gap-7">
             {navLinks.map((link) => (
               <NavLink
                 key={link.label}
@@ -142,14 +144,17 @@ export const PublicLayout: React.FC<{ children?: React.ReactNode }> = ({ childre
                 <div className="w-9 h-9 rounded-xl bg-brand-600 flex items-center justify-center text-white font-bold">
                   <MessageSquare className="w-5 h-5" />
                 </div>
-                <span className="text-xl font-extrabold text-white tracking-tight">MetaGreenWave</span>
+                <div>
+                  <span className="text-xl font-extrabold text-white tracking-tight block">MetaGreenWave</span>
+                  <span className="text-xs text-slate-400">Operated by Digi8 Solutions</span>
+                </div>
               </div>
               <p className="text-slate-400 text-xs leading-relaxed max-w-sm">
-                Production-oriented WhatsApp Business Messaging SaaS platform. Engineered for campaign orchestration, shared team inboxes, no-code chatbots, and CRM sales pipelines.
+                Production-oriented WhatsApp Business Messaging SaaS platform. Engineered for campaign orchestration, shared team inboxes, no-code chatbots, and CRM sales pipelines via official Meta Cloud API.
               </p>
-              <div className="pt-2 text-xs text-slate-500">
-                <p>Status: All Systems Operational</p>
-                <p className="mt-1">Meta Graph API: v21.0 Connected</p>
+              <div className="pt-2 text-xs text-slate-500 space-y-1">
+                <p>Support & Privacy: <a href="mailto:hello@digi8solutions.com" className="text-slate-300 hover:underline">hello@digi8solutions.com</a></p>
+                <p><Link to="/status" className="text-emerald-400 hover:underline flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>All Systems Operational &bull; Status Page</Link></p>
               </div>
             </div>
 
@@ -162,7 +167,7 @@ export const PublicLayout: React.FC<{ children?: React.ReactNode }> = ({ childre
                 <li><Link to="/features" className="hover:text-white transition-colors">Chatbot Studio</Link></li>
                 <li><Link to="/features" className="hover:text-white transition-colors">Workflow Automation</Link></li>
                 <li><Link to="/features" className="hover:text-white transition-colors">WhatsApp CRM</Link></li>
-                <li><Link to="/features" className="hover:text-white transition-colors">Transactional OTP</Link></li>
+                <li><Link to="/security" className="hover:text-white transition-colors">Security Architecture</Link></li>
               </ul>
             </div>
 
@@ -174,19 +179,21 @@ export const PublicLayout: React.FC<{ children?: React.ReactNode }> = ({ childre
                 <li><Link to="/solutions" className="hover:text-white transition-colors">Education & Academies</Link></li>
                 <li><Link to="/solutions" className="hover:text-white transition-colors">Healthcare & Clinics</Link></li>
                 <li><Link to="/solutions" className="hover:text-white transition-colors">Real Estate Agencies</Link></li>
-                <li><Link to="/solutions" className="hover:text-white transition-colors">Customer Support</Link></li>
+                <li><Link to="/pricing" className="hover:text-white transition-colors">Plans & Pricing</Link></li>
+                <li><Link to="/status" className="hover:text-white transition-colors">System Status</Link></li>
               </ul>
             </div>
 
-            {/* Company & Legal column */}
+            {/* Legal & Trust column */}
             <div>
-              <h4 className="text-xs font-bold text-white uppercase tracking-wider mb-4">Trust & Legal</h4>
+              <h4 className="text-xs font-bold text-white uppercase tracking-wider mb-4">Trust & Compliance</h4>
               <ul className="space-y-2.5 text-xs">
-                <li><Link to="/about" className="hover:text-white transition-colors">About Platform</Link></li>
-                <li><Link to="/pricing" className="hover:text-white transition-colors">Plans & Pricing</Link></li>
-                <li><Link to="/faq" className="hover:text-white transition-colors">Knowledge Base & FAQ</Link></li>
                 <li><Link to="/privacy-policy" className="hover:text-white transition-colors">Privacy Policy</Link></li>
                 <li><Link to="/terms-of-service" className="hover:text-white transition-colors">Terms of Service</Link></li>
+                <li><Link to="/data-deletion" className="hover:text-white transition-colors font-semibold text-brand-400">Data Deletion Portal</Link></li>
+                <li><Link to="/cookies" className="hover:text-white transition-colors">Cookie Policy</Link></li>
+                <li><Link to="/acceptable-use" className="hover:text-white transition-colors">Acceptable Use Policy</Link></li>
+                <li><Link to="/cancellation-refund" className="hover:text-white transition-colors">Refund & Cancellation</Link></li>
                 <li><Link to="/contact" className="hover:text-white transition-colors">Contact Support</Link></li>
               </ul>
             </div>
@@ -194,16 +201,16 @@ export const PublicLayout: React.FC<{ children?: React.ReactNode }> = ({ childre
 
           {/* Compliance & Trademark Disclaimer */}
           <div className="mt-12 pt-8 border-t border-slate-900 text-center md:text-left flex flex-col md:flex-row items-center justify-between gap-4 text-xs text-slate-500">
-            <p>
-              &copy; {new Date().getFullYear()} MetaGreenWave Technologies Inc. All rights reserved. MetaGreenWave is an enterprise software platform that integrates with the official Meta WhatsApp Cloud API. WhatsApp is a registered trademark of Meta Platforms, Inc.
+            <p className="max-w-2xl">
+              &copy; {new Date().getFullYear()} Digi8 Solutions. All rights reserved. MetaGreenWave by Digi8 Solutions is an independent software application that integrates with the official WhatsApp Business Platform Cloud API provided by Meta Platforms, Inc. WhatsApp and Meta are registered trademarks of Meta Platforms, Inc.
             </p>
-            <div className="flex items-center gap-4 text-slate-400">
+            <div className="flex items-center gap-4 text-slate-400 shrink-0">
               <span className="inline-flex items-center gap-1.5">
                 <ShieldCheck className="w-4 h-4 text-brand-500" />
-                <span>AES-256 Encrypted</span>
+                <span>AES-256-GCM Encrypted</span>
               </span>
               <span>&bull;</span>
-              <span>24h Service Window Compliant</span>
+              <span>DPDPA & GDPR Ready</span>
             </div>
           </div>
         </div>

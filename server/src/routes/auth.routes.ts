@@ -154,6 +154,22 @@ router.post('/register', async (req: Request, res: Response) => {
           [uuidv4(), orgId, stepKey, now]
         );
       }
+
+      // 8. Record Auditable Policy Consents (Terms and Conditions & Privacy Policy)
+      const clientIp = (req.headers['x-forwarded-for'] as string)?.split(',')[0].trim() || req.socket.remoteAddress || '127.0.0.1';
+      const userAgent = req.headers['user-agent'] || 'Unknown Browser';
+
+      db.execute(
+        `INSERT INTO policy_consents (id, user_id, organization_id, policy_name, policy_version, accepted_at, ip_address, user_agent, consent_category)
+         VALUES (?, ?, ?, 'terms_and_conditions', 'v2.0', ?, ?, ?, 'essential')`,
+        [uuidv4(), userId, orgId, now, clientIp, userAgent]
+      );
+
+      db.execute(
+        `INSERT INTO policy_consents (id, user_id, organization_id, policy_name, policy_version, accepted_at, ip_address, user_agent, consent_category)
+         VALUES (?, ?, ?, 'privacy_policy', 'v2.0', ?, ?, ?, 'essential')`,
+        [uuidv4(), userId, orgId, now, clientIp, userAgent]
+      );
     });
 
     // Send transactional emails

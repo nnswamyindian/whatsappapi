@@ -29,6 +29,7 @@ import crmRoutes from './routes/crm.routes.js';
 import replyRulesRoutes from './routes/reply-rules.routes.js';
 import notificationsRoutes from './routes/notifications.routes.js';
 import onboardingRoutes from './routes/onboarding.routes.js';
+import metaRoutes from './routes/meta.routes.js';
 const app = express();
 // Security and parser middleware
 app.use((req, res, next) => {
@@ -136,6 +137,7 @@ app.use('/api/v1/crm', crmRoutes);
 app.use('/api/v1/reply-rules', replyRulesRoutes);
 app.use('/api/v1/notifications', notificationsRoutes);
 app.use('/api/v1/onboarding', onboardingRoutes);
+app.use('/api/v1/meta', metaRoutes);
 app.use('/api/v1/admin', adminRoutes);
 // Serve static client build if present
 const __filename = fileURLToPath(import.meta.url);
